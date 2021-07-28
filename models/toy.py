@@ -2,6 +2,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 import pytorch_lightning as pl
+import torchmetrics
 
 
 class MNISTToyModel(pl.LightningModule):
@@ -12,6 +13,8 @@ class MNISTToyModel(pl.LightningModule):
         self.conv2_drop = nn.Dropout2d()
         self.fc1 = nn.Linear(320, 50)
         self.fc2 = nn.Linear(50, 10)
+
+        self.accuracy = torchmetrics.Accuracy()
 
     def forward(self, x):
         x = F.relu(F.max_pool2d(self.conv1(x), 2))
@@ -31,6 +34,8 @@ class MNISTToyModel(pl.LightningModule):
         y_hat = self(x)
         loss = F.cross_entropy(y_hat, y)
         self.log('train_loss', loss)
+        self.log('train_acc', self.accuracy(y_hat, y), prog_bar=True)
+
         return loss
 
     def validation_step(self, val_batch, batch_idx):
@@ -38,4 +43,10 @@ class MNISTToyModel(pl.LightningModule):
         y_hat = self(x)
         loss = F.cross_entropy(y_hat, y)
         self.log('val_loss', loss)
+        self.log('val_acc', self.accuracy(y_hat, y), prog_bar=True)
+
         return loss
+
+    def training_epoch_end(self, outs):
+        # log epoch metric
+        self.log('train_acc_epoch', self.accuracy.compute())

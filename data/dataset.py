@@ -23,3 +23,6 @@ class OnePixelMNIST:
         elif self.permute:
             image[0, np.random.randint(0, 9)] = 255
         return image, target
+
+    def __len__(self):
+        return len(self.dataset)
