@@ -21,7 +21,7 @@ class OnePixelMNIST:
         if self.train:
             image[0, 0, target] = 12
         elif self.permute:
-            image[0, 0, np.random.randint(0, 9)] = 1
+            image[0, 0, np.random.randint(0, 9)] = 12
         return image, target
 
     def __len__(self):
