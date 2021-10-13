@@ -1,25 +1,27 @@
-import imagenet_models
 import torch as ch
 import os
 from torchvision import transforms
-from tools import folder
+from . import folder
 from torch.utils.data import DataLoader
 
+def make_loader(workers, batch_size, transforms, data_path, name, shuffle_val=False):
+    path = os.path.join(data_path, name)
+    if not os.path.exists(path):
+        raise ValueError("{1} data must be stored in {0}".format(path, name))
+
+    set_folder = folder.ImageFolder(root=path, transform=transforms)
+    loader = DataLoader(set_folder, batch_size=batch_size, shuffle=shuffle_val, num_workers=workers, pin_memory=True)
+
+    return loader
 
 def make_loaders(workers, batch_size, transforms, data_path, dataset, shuffle_val=False):
     '''
     '''
     print(f"==> Preparing dataset {dataset}..")
-
-    test_path = os.path.join(data_path, 'val')
-    if not os.path.exists(test_path):
-        raise ValueError("Test data must be stored in {0}".format(test_path))
-
-    test_set = folder.ImageFolder(root=test_path, transform=transforms)
-    test_loader = DataLoader(test_set, batch_size=batch_size, 
-            shuffle=shuffle_val, num_workers=workers, pin_memory=True)
-
-    return test_loader
+    
+    train_loader = make_loader(workers, batch_size, transforms, data_path, 'train', True)
+    test_loader = make_loader(workers, batch_size, transforms, data_path, 'val', False)
+    return train_loader, test_loader
 
 
 class DataSet(object):
@@ -71,18 +73,10 @@ class ImageNet9(DataSet):
             'num_classes': 9,
             'mean': ch.tensor([0.4717, 0.4499, 0.3837]), 
             'std': ch.tensor([0.2600, 0.2516, 0.2575]),
-            'transform_test': transforms.ToTensor()
+            'transform_test': transforms.Compose([transforms.Resize((224, 224)), transforms.ToTensor()])
         }
         super(ImageNet9, self).__init__(ds_name,
                 data_path, **ds_kwargs)
-        
-    def get_model(self, arch, pretrained):
-        """
-        """
-        if pretrained:
-            raise ValueError("Dataset doesn't support pytorch_pretrained")
-        return imagenet_models.__dict__[arch](num_classes=self.num_classes)
-
 
 class ImageNet(DataSet):
     '''
@@ -95,14 +89,7 @@ class ImageNet(DataSet):
             'num_classes': 1000,
             'mean': ch.tensor([0.485, 0.456, 0.406]),
             'std': ch.tensor([0.229, 0.224, 0.225]),
-            'transform_test': transforms.ToTensor()
+            'transform_test': transforms.Compose([transforms.Resize((224, 224)), transforms.ToTensor()])
         }
         super(ImageNet, self).__init__(ds_name,
                 data_path, **ds_kwargs)
-        
-    def get_model(self, arch, pretrained):
-        """
-        """
-        return imagenet_models.__dict__[arch](num_classes=self.num_classes, 
-                                        pretrained=pretrained)
-
