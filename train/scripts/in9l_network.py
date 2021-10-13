@@ -25,10 +25,10 @@ tensorboard_logger = pl_loggers.TensorBoardLogger(args.log_dir, name=f'in9l_{arg
 imagenet_dataset = ImageNet9.ImageNet9(args.dataset_path)
 
 train_loader, val_loader = imagenet_dataset.make_loaders(batch_size=64, workers=args.workers)
-model = TIMMModel(timm.create_model(args.network, pretrained=False))
+model = TIMMModel(timm.create_model(args.network, pretrained=False, num_classes=9))
 
 # training
-trainer = pl.Trainer(max_epochs=10, logger=tensorboard_logger, gpus=args.gpus)
+trainer = pl.Trainer(max_epochs=args.epochs, logger=tensorboard_logger, gpus=args.gpus)
 trainer.fit(model, train_loader, val_loader)
 
 model_file = open(args.save_path, 'wb')
