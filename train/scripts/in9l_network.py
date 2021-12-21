@@ -38,7 +38,7 @@ model = TIMMModel(timm.create_model(args.network, pretrained=False, num_classes=
 
 callbacks = [EarlyStopping(monitor="val_acc", mode='max', patience=5, min_delta=0.00)]
 if args.use_auto_background_transform:
-    callbacks.append(UpdateChancesBasedOnAccuracyCallback(model, imagenet_dataset.augmentation, 0.005))
+    callbacks.append(UpdateChancesBasedOnAccuracyCallback(model, imagenet_dataset.augmentation, 0.020, args.gpus > 0))
 # training
 trainer = pl.Trainer(max_epochs=args.epochs, logger=tensorboard_logger, gpus=args.gpus, callbacks=callbacks)
 trainer.fit(model, train_loader, val_loader)

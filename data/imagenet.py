@@ -110,9 +110,9 @@ class ImageNetAugmented(DataSet):
         """
         self.foregrounds_path = foregrounds_path
         backgrounds = []
-        for background_path in [f'{backgrounds_path}']: #, f'{backgrounds_path}/val'
-            for inner_dir in os.listdir(background_path):
-                for image_path in os.listdir(f'{background_path}/{inner_dir}'):
+        for background_path in [f'{backgrounds_path}']:
+            for inner_dir in sorted(os.listdir(background_path)):
+                for image_path in sorted(os.listdir(f'{background_path}/{inner_dir}')):
                     backgrounds.append(f'{background_path}/{inner_dir}/{image_path}')
         self.augmentation = augmentations.RandomBackgroundPerClass([background_transform_chance] * 9, backgrounds)
         ds_name = 'ImageNet'

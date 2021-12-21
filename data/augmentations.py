@@ -15,26 +15,27 @@ class RandomBackgroundPerClass(object):
                 sample = TF.resize(sample, (224, 224))
                 return TF.to_tensor(sample)
             image, backgroundless, target = sample
-            augmentation_chance, background_numer = torch.rand(2)
+            augmentation_chance = torch.rand(1)
             if augmentation_chance < self.augment_chances[target]:
                 image = backgroundless.copy()
-                background_id = int(background_numer*len(self.backgrounds_paths))
+                background_id = torch.randint(0, len(self.backgrounds_paths), (1, ))
                 background = TF.pil_to_tensor(folder.default_loader(self.backgrounds_paths[background_id]))
                 background = TF.resize(background, (224, 224))
                 image = TF.resize(image, (224, 224))
                 image = TF.to_tensor(image)
-                indices = image == 0
-                image[indices] = (background.float()/255)[indices]
+                indices = (image[0, :, :] < 0.02).logical_and(image[1, :, :] < 0.02).logical_and(image[2, :, :] < 0.02)
+                image[:, indices] = (background.float()/255)[:, indices]
             else:
                 image = TF.resize(image, (224, 224))
                 image = TF.to_tensor(image)
             return image
 
 class UpdateChancesBasedOnAccuracyCallback(Callback):
-        def __init__(self, model, augmentation, background_test_count = 1.):
+        def __init__(self, model, augmentation, background_test_count = 1., use_cuda = True):
             self.augmentation = augmentation
             self.model = model
             self.background_test_count = background_test_count
+            self.use_cuda = use_cuda
             
         def on_validation_epoch_end(self, trainer, module):
             classes_count = len(self.augmentation.augment_chances)
@@ -42,11 +43,13 @@ class UpdateChancesBasedOnAccuracyCallback(Callback):
                 return
             backgrounds = self.augmentation.backgrounds_paths
             image_count = int(self.background_test_count * len(backgrounds))
-            background_indices = np.random.choice(np.array(range(len(backgrounds))), size=image_count)
+            background_indices = np.random.choice(np.array(range(len(backgrounds))), size=image_count, replace=False)
             images = []
             for bg_ind in background_indices:
                 background = TF.pil_to_tensor(folder.default_loader(backgrounds[bg_ind]))
-                background = TF.resize(background.float()/255, (224, 224)).cuda()
+                if self.use_cuda:
+                	background = background.cuda()
+                background = TF.resize(background.float()/255, (224, 224))
                 images.append(background)
             
             images = torch.stack(images).chunk(4)

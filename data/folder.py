@@ -121,7 +121,7 @@ class DatasetFolder(data.Dataset):
             # Faster and available in Python 3.5 and above
             classes = [d.name for d in os.scandir(dir) if d.is_dir()]
         else:
-            classes = [d for d in os.listdir(dir) if os.path.isdir(os.path.join(dir, d))]
+            classes = [d for d in sorted(os.listdir(dir)) if os.path.isdir(os.path.join(dir, d))]
         classes.sort()
         class_to_idx = {classes[i]: i for i in range(len(classes))}
         return classes, class_to_idx
