@@ -21,6 +21,7 @@ parser.add_argument('-e', '--epochs', type=int, default=50)
 parser.add_argument('-t', '--use-background-transform', type=bool, default=False)
 parser.add_argument('--use-auto-background-transform', type=bool, default=False)
 parser.add_argument('--background-transform-chance', type=float, default=0.0)
+parser.add_argument('--augmentation-checking-dataset-size', type=float, default=0.2)
 parser.add_argument('--backgrounds-path', type=str, default='data/only_bg_t/merged')
 parser.add_argument('--foregrounds-path', type=str, default='data/only_fg/train')
 
@@ -38,7 +39,7 @@ model = TIMMModel(timm.create_model(args.network, pretrained=False, num_classes=
 
 callbacks = [EarlyStopping(monitor="val_acc", mode='max', patience=5, min_delta=0.00)]
 if args.use_auto_background_transform:
-    callbacks.append(UpdateChancesBasedOnAccuracyCallback(model, imagenet_dataset.augmentation, 0.020, args.gpus > 0))
+    callbacks.append(UpdateChancesBasedOnAccuracyCallback(model, imagenet_dataset.augmentation, args.augmentation_checking_dataset_size, args.gpus > 0))
 # training
 trainer = pl.Trainer(max_epochs=args.epochs, logger=tensorboard_logger, gpus=args.gpus, callbacks=callbacks)
 trainer.fit(model, train_loader, val_loader)
