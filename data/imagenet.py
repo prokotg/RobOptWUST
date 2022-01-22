@@ -99,11 +99,14 @@ class ImageNet(DataSet):
         """
         """
         ds_name = 'ImageNet'
+        common_tr = [augmentations.UnwrapTupled(), transforms.Resize((224, 224)), transforms.ToTensor()]
+        train_tr = common_tr + [transforms.RandomResizedCrop(224), transforms.RandomHorizontalFlip(), transforms.ColorJitter(0.4, 0.4, 0.4)]
         ds_kwargs = {
             'num_classes': 1000,
             'mean': ch.tensor([0.485, 0.456, 0.406]),
             'std': ch.tensor([0.229, 0.224, 0.225]),
-            'transform_test': transforms.Compose([augmentations.UnwrapTupled(), transforms.Resize((224, 224)), transforms.ToTensor()])
+            'transform_train' : transforms.Compose(train_tr),
+            'transform_test': transforms.Compose(common_tr)
         }
         super(ImageNet, self).__init__(ds_name,
                 data_path, **ds_kwargs)
@@ -121,12 +124,16 @@ class ImageNetBackgroundChangeAugmented(DataSet):
                 for image_path in sorted(os.listdir(f'{background_path}/{inner_dir}')):
                     backgrounds.append(f'{background_path}/{inner_dir}/{image_path}')
         self.augmentation = augmentations.RandomBackgroundPerClass([background_transform_chance] * 9, backgrounds)
+        
+        common_tr = [augmentations.UnwrapTupled(), transforms.Resize((224, 224)), transforms.ToTensor()]
+        train_tr = [self.augmentation, transforms.RandomResizedCrop(224), transforms.RandomHorizontalFlip(), transforms.ColorJitter(0.4, 0.4, 0.4)]
         ds_name = 'ImageNet'
         ds_kwargs = {
             'num_classes': 9,
             'mean': ch.tensor([0.485, 0.456, 0.406]),
             'std': ch.tensor([0.229, 0.224, 0.225]),
-            'transform_test': transforms.Compose([self.augmentation])
+            'transform_train' : transforms.Compose(train_tr),
+            'transform_test': transforms.Compose(common_tr)
         }
         super().__init__(ds_name,
                 data_path, **ds_kwargs)
@@ -139,7 +146,8 @@ class ImageNetBackgroundChangeAugmented(DataSet):
         transforms = self.transform_test
         return generate_loaders(workers=workers,
                                 batch_size=batch_size,
-                                transforms=transforms,
+                                transform_train=self.transform_train,
+                                transform_test=self.transform_test,
                                 data_path=self.data_path,
                                 dataset=self.ds_name,
                                 shuffle_val=shuffle_val,
@@ -156,12 +164,16 @@ class ImageNetBackgroundBlurAugmented(DataSet):
         self.backgrounds_path = backgrounds_path
         self.default_path = data_path
         self.augmentation = augmentations.RandomBackgroundBlur([background_transform_chance] * 9)
+
+        common_tr = [augmentations.UnwrapTupled(), transforms.Resize((224, 224)), transforms.ToTensor()]
+        train_tr = [self.augmentation, transforms.RandomResizedCrop(224), transforms.RandomHorizontalFlip(), transforms.ColorJitter(0.4, 0.4, 0.4)]
         ds_name = 'ImageNet'
         ds_kwargs = {
             'num_classes': 9,
             'mean': ch.tensor([0.485, 0.456, 0.406]),
             'std': ch.tensor([0.229, 0.224, 0.225]),
-            'transform_test': transforms.Compose([self.augmentation])
+            'transform_train' : transforms.Compose(train_tr),
+            'transform_test': transforms.Compose(common_tr)
         }
         super().__init__(ds_name,
                 foregrounds_path, **ds_kwargs)
@@ -174,7 +186,8 @@ class ImageNetBackgroundBlurAugmented(DataSet):
         transforms = self.transform_test
         return generate_loaders(workers=workers,
                                 batch_size=batch_size,
-                                transforms=transforms,
+                                transform_train=self.transform_train,
+                                transform_test=self.transform_test,
                                 data_path=self.data_path,
                                 dataset=self.ds_name,
                                 shuffle_val=shuffle_val,
