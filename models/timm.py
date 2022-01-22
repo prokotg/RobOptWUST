@@ -39,4 +39,4 @@ class TIMMModel(pl.LightningModule):
         optimizer = torch.optim.SGD(self.parameters(), lr=0.1)
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.1)
 
-        return optimizer, scheduler
+        return [optimizer], [scheduler]
