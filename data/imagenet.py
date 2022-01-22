@@ -19,14 +19,16 @@ def make_loader(workers, batch_size, transforms, data_path, name, shuffle_val=Fa
 
     return loader
 
-def make_loaders(workers, batch_size, transforms, data_path, dataset, shuffle_val=False, add_path=False, additional_path=None, valid_path=None):
+def generate_loaders(workers, batch_size, transform_train, transform_test, data_path, dataset,
+                 shuffle_val=False, add_path=False, additional_path=None, valid_path=None):
     '''
     '''
     print(f"==> Preparing dataset {dataset}..")
     if valid_path is None:
         valid_path = data_path
-    train_loader = make_loader(workers, batch_size, transforms, data_path, 'train', True, add_path=add_path, additional_path=additional_path)
-    test_loader = make_loader(workers, batch_size, transforms, data_path, 'val', shuffle_val, add_path=add_path)
+
+    train_loader = make_loader(workers, batch_size, transform_train, data_path, 'train', True, add_path=add_path, additional_path=additional_path)
+    test_loader = make_loader(workers, batch_size, transform_test, data_path, 'val', shuffle_val, add_path=add_path)
     return train_loader, test_loader
 
 
@@ -47,10 +49,10 @@ class DataSet(object):
     def make_loaders(self, workers, batch_size, shuffle_val=False, add_path=False, additional_path=None):
         '''
         '''
-        transforms = self.transform_test
-        return make_loaders( workers=workers,
+        return generate_loaders(workers=workers,
                                 batch_size=batch_size,
-                                transforms=transforms,
+                                transform_train=None,
+                                transform_test=self.transform_test,
                                 data_path=self.data_path,
                                 dataset=self.ds_name,
                                 shuffle_val=shuffle_val,
@@ -78,11 +80,14 @@ class ImageNet9(DataSet):
         """
         """
         ds_name = 'ImageNet9'
+        common_tr = [augmentations.UnwrapTupled(), transforms.Resize((224, 224)), transforms.ToTensor()]
+        train_tr = common_tr + [transforms.RandomResizedCrop(), transforms.RandomHorizontalFlip(), transforms.ColorJitter()]
         ds_kwargs = {
             'num_classes': 9,
             'mean': ch.tensor([0.4717, 0.4499, 0.3837]), 
             'std': ch.tensor([0.2600, 0.2516, 0.2575]),
-            'transform_test': transforms.Compose([augmentations.UnwrapTupled(), transforms.Resize((224, 224)), transforms.ToTensor()])
+            'transform_train' : transforms.Compose(train_tr),
+            'transform_test': transforms.Compose(common_tr)
         }
         super(ImageNet9, self).__init__(ds_name,
                 data_path, **ds_kwargs)
@@ -132,7 +137,7 @@ class ImageNetBackgroundChangeAugmented(DataSet):
         if additional_path is None:
             additional_path = self.foregrounds_path
         transforms = self.transform_test
-        return make_loaders(workers=workers,
+        return generate_loaders(workers=workers,
                                 batch_size=batch_size,
                                 transforms=transforms,
                                 data_path=self.data_path,
@@ -167,7 +172,7 @@ class ImageNetBackgroundBlurAugmented(DataSet):
         if additional_path is None:
             additional_path = self.backgrounds_path
         transforms = self.transform_test
-        return make_loaders(workers=workers,
+        return generate_loaders(workers=workers,
                                 batch_size=batch_size,
                                 transforms=transforms,
                                 data_path=self.data_path,
