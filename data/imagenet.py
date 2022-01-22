@@ -39,7 +39,7 @@ class DataSet(object):
     def __init__(self, ds_name, data_path, **kwargs):
         """
         """
-        required_args = ['num_classes', 'mean', 'std', 'transform_test']
+        required_args = ['num_classes', 'mean', 'std', 'transform_test', 'transform_train']
         assert set(kwargs.keys()) == set(required_args), "Missing required args, only saw %s" % kwargs.keys()
         self.ds_name = ds_name
         print(data_path)
