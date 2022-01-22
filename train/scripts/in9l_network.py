@@ -19,20 +19,26 @@ parser.add_argument('-w', '--workers', type=int, default=4)
 parser.add_argument('-g', '--gpus', type=int, default=1)
 parser.add_argument('-e', '--epochs', type=int, default=50)
 parser.add_argument('-t', '--use-background-transform', type=bool, default=False)
+parser.add_argument('-b', '--use-background-blur', type=bool, default=False)
 parser.add_argument('--use-auto-background-transform', type=bool, default=False)
 parser.add_argument('--background-transform-chance', type=float, default=0.0)
 parser.add_argument('--augmentation-checking-dataset-size', type=float, default=0.2)
-parser.add_argument('--backgrounds-path', type=str, default='data/only_bg_t/merged')
+parser.add_argument('--backgrounds-path', type=str, default='data/only_bg_t/train')
 parser.add_argument('--foregrounds-path', type=str, default='data/only_fg/train')
 
 args = parser.parse_args()
 
 tensorboard_logger = pl_loggers.TensorBoardLogger(args.log_dir, name=f'in9l_{args.network}')
 
+if args.use_background_transform and args.use_background_blur:
+    print('Do not use both of the augmentation in the same time!')
 if args.use_background_transform:
-    imagenet_dataset = ImageNet9.ImageNetAugmented(args.dataset_path, args.backgrounds_path, args.foregrounds_path, args.background_transform_chance)
+    imagenet_dataset = ImageNet9.ImageNetBackgroundChangeAugmented(args.dataset_path, args.backgrounds_path, args.foregrounds_path, args.background_transform_chance)
+elif args.use_background_blur:
+    imagenet_dataset = ImageNet9.ImageNetBackgroundBlurAugmented(args.dataset_path, args.backgrounds_path, args.foregrounds_path, args.background_transform_chance)
 else:
     imagenet_dataset = ImageNet9.ImageNet9(args.dataset_path)
+
 
 train_loader, val_loader = imagenet_dataset.make_loaders(batch_size=64, workers=args.workers, add_path=True)
 model = TIMMModel(timm.create_model(args.network, pretrained=False, num_classes=9))

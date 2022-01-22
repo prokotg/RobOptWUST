@@ -168,7 +168,7 @@ class DatasetMultifolder(DatasetFolder):
     def __getitem__(self, index):
         path, target = self.samples[index]
         sample = self.loader(path)
-        background = self.loader(path.replace(self.roots[0], self.roots[1]))
+        background = self.loader(path.replace(self.roots[0].replace('/train', ''), self.roots[1]))
         if self.transform is not None:
             sample = self.transform((sample, background, target))
         if self.target_transform is not None:

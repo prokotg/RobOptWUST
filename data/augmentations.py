@@ -29,6 +29,28 @@ class RandomBackgroundPerClass(object):
                 image = TF.resize(image, (224, 224))
                 image = TF.to_tensor(image)
             return image
+            
+
+class RandomBackgroundBlur(object):
+        def __init__(self, augment_chances):
+            self.augment_chances = augment_chances
+            
+        def __call__(self, sample):
+            if type(sample) is not tuple:
+                sample = TF.resize(sample, (224, 224))
+                return TF.to_tensor(sample)
+            image, background, target = sample
+            augmentation_chance = torch.rand(1)
+            background = TF.resize(background, (224, 224))
+            if augmentation_chance < self.augment_chances[target]:
+                background = TF.gaussian_blur(background, 7)
+            background = TF.pil_to_tensor(background)
+            image = TF.resize(image, (224, 224))
+            image = TF.to_tensor(image)
+            indices = (image[0, :, :] < 0.02).logical_and(image[1, :, :] < 0.02).logical_and(image[2, :, :] < 0.02)
+            image[:, indices] = (background/255)[:, indices]
+            return image
+
 
 class UpdateChancesBasedOnAccuracyCallback(Callback):
         def __init__(self, model, augmentation, background_test_count = 1., use_cuda = True):
@@ -65,6 +87,8 @@ class UpdateChancesBasedOnAccuracyCallback(Callback):
             
             for i in range(classes_count):
                 self.augmentation.augment_chances[i] = corrects[i] / counts[i]
+
+
 
 class UnwrapTupled(object):
         def __call__(self, sample):
