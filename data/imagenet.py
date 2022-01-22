@@ -81,7 +81,7 @@ class ImageNet9(DataSet):
         """
         ds_name = 'ImageNet9'
         common_tr = [augmentations.UnwrapTupled(), transforms.Resize((224, 224)), transforms.ToTensor()]
-        train_tr = common_tr + [transforms.RandomResizedCrop(224), transforms.RandomHorizontalFlip(), transforms.ColorJitter()]
+        train_tr = common_tr + [transforms.RandomResizedCrop(224), transforms.RandomHorizontalFlip(), transforms.ColorJitter(0.4, 0.4, 0.4)]
         ds_kwargs = {
             'num_classes': 9,
             'mean': ch.tensor([0.4717, 0.4499, 0.3837]), 
