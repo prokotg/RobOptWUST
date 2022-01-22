@@ -17,7 +17,7 @@ parser.add_argument('-d', '--dataset-path', type=str, default='data/original/')
 parser.add_argument('-l', '--log-dir', type=str, default='logs/')
 parser.add_argument('-w', '--workers', type=int, default=4)
 parser.add_argument('-g', '--gpus', type=int, default=1)
-parser.add_argument('-e', '--epochs', type=int, default=50)
+parser.add_argument('-e', '--epochs', type=int, default=200)
 parser.add_argument('-t', '--use-background-transform', type=bool, default=False)
 parser.add_argument('-b', '--use-background-blur', type=bool, default=False)
 parser.add_argument('--use-auto-background-transform', type=bool, default=False)
@@ -43,7 +43,7 @@ else:
 train_loader, val_loader = imagenet_dataset.make_loaders(batch_size=64, workers=args.workers, add_path=True)
 model = TIMMModel(timm.create_model(args.network, pretrained=False, num_classes=9))
 
-callbacks = [EarlyStopping(monitor="val_acc", mode='max', patience=5, min_delta=0.00)]
+callbacks = []
 if args.use_auto_background_transform:
     callbacks.append(UpdateChancesBasedOnAccuracyCallback(model, imagenet_dataset.augmentation, args.augmentation_checking_dataset_size, args.gpus > 0))
 # training
