@@ -36,5 +36,7 @@ class TIMMModel(pl.LightningModule):
         self.log('train_acc_epoch', self.accuracy.compute())
     
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
-        return optimizer
+        optimizer = torch.optim.SGD(self.parameters(), lr=0.1)
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.1)
+
+        return optimizer, scheduler
