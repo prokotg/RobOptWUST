@@ -51,7 +51,7 @@ class DataSet(object):
         '''
         return generate_loaders(workers=workers,
                                 batch_size=batch_size,
-                                transform_train=None,
+                                transform_train=self.transform_train,
                                 transform_test=self.transform_test,
                                 data_path=self.data_path,
                                 dataset=self.ds_name,
