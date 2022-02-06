@@ -13,14 +13,17 @@ parser.add_argument('-b', '--use-background-blur', type=bool, default=False)
 parser.add_argument('--use-auto-background-transform', type=bool, default=False)
 parser.add_argument('--backgrounds-path', type=str, default='data/only_bg_t')
 parser.add_argument('--foregrounds-path', type=str, default='data/only_fg')
+parser.add_argument('-c', '--chances', nargs='+', type=float)
+
+
 
 args = parser.parse_args()
 
-networks = { 'resnet34' : range(0, 5), 'resnet50': range(0, 5), 'mobilenetv2_100' : range(0, 5)}
+networks = { 'resnet50': [0]}
 
 epochs = args.epochs
 save_dir = args.save_directory
-transform_chances = [1.0, 0.5, 0.25, 0.0]
+transform_chances = args.chances
 auto_transform = args.use_auto_background_transform
 generic_args = ['env', 'PYTHONPATH=.', 'python', './train/scripts/in9l_network.py', '-e', str(epochs), '-d', args.dataset_path, '--backgrounds-path', args.backgrounds_path, '--foregrounds-path', args.foregrounds_path, '-w', str(args.workers), '-l', args.log_dir, '-g', str(args.gpus)]
 for net in networks:
