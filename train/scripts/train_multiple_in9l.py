@@ -22,7 +22,7 @@ epochs = args.epochs
 save_dir = args.save_directory
 transform_chances = [1.0, 0.5, 0.25, 0.0]
 auto_transform = args.use_auto_background_transform
-generic_args = ['env', 'PYTHONPATH=.', 'python3', './train/scripts/in9l_network.py', '-e', str(epochs), '-d', args.dataset_path, '--backgrounds-path', args.backgrounds_path, '--foregrounds-path', args.foregrounds_path, '-w', str(args.workers), '-l', args.log_dir, '-g', str(args.gpus)]
+generic_args = ['env', 'PYTHONPATH=.', 'python', './train/scripts/in9l_network.py', '-e', str(epochs), '-d', args.dataset_path, '--backgrounds-path', args.backgrounds_path, '--foregrounds-path', args.foregrounds_path, '-w', str(args.workers), '-l', args.log_dir, '-g', str(args.gpus)]
 for net in networks:
 	os.makedirs(f'{save_dir}/{net}', exist_ok=True)
 	for i in networks[net]:
