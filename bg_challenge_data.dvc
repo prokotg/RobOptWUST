@@ -1,0 +1,5 @@
+outs:
+- md5: bc201be88d6e365c9bd2ab04ba3168f9.dir
+  size: 9938338347
+  nfiles: 2
+  path: bg_challenge_data

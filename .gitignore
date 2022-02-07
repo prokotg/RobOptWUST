@@ -151,3 +151,5 @@ crashlytics-build.properties
 fabric.properties
 
 data/*/
+/datasets
+/bg_challenge_data
