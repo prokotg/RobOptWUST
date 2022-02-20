@@ -6,28 +6,28 @@ from . import augmentations
 import time
 from torch.utils.data import DataLoader
 
-def make_loader(workers, batch_size, transforms, data_path, name, shuffle_val=False, add_path=False, additional_path=None):
+def make_loader(workers, batch_size, transforms, data_path, name, shuffle_val=False, add_path=False, add_target=False, additional_path=None, index_instead_of_class=False):
     path = os.path.join(data_path, name)
     if not os.path.exists(path):
         raise ValueError("{1} data must be stored in {0}".format(path, name))
 
     if additional_path is None:
-        set_folder = folder.ImageFolder(root=path, transform=transforms, add_path=add_path)
+        set_folder = folder.ImageFolder(root=path, transform=transforms, add_path=add_path, add_target=add_target, index_instead_of_class=index_instead_of_class)
     else:
-        set_folder = folder.MultiImageFolder(root=[path, additional_path], transform=transforms, add_path=add_path)
+        set_folder = folder.MultiImageFolder(root=[path, additional_path], transform=transforms, add_path=add_path, add_target=add_target, index_instead_of_class=index_instead_of_class)
     loader = DataLoader(set_folder, batch_size=batch_size, shuffle=shuffle_val, num_workers=workers, pin_memory=True)
 
     return loader
 
 def generate_loaders(workers, batch_size, transform_train, transform_test, data_path, dataset,
-                 shuffle_val=False, add_path=False, additional_path=None, valid_path=None):
+                 shuffle_val=False, add_path=False, additional_path=None, valid_path=None, add_target=False, index_instead_of_class=False):
     '''
     '''
     print(f"==> Preparing dataset {dataset}..")
     if valid_path is None:
         valid_path = data_path
 
-    train_loader = make_loader(workers, batch_size, transform_train, data_path, 'train', True, add_path=add_path, additional_path=additional_path)
+    train_loader = make_loader(workers, batch_size, transform_train, data_path, 'train', True, add_path=add_path, additional_path=additional_path, add_target=add_target, index_instead_of_class=index_instead_of_class)
     test_loader = make_loader(workers, batch_size, transform_test, data_path, 'val', shuffle_val, add_path=add_path)
     return train_loader, test_loader
 
@@ -46,7 +46,7 @@ class DataSet(object):
         self.data_path = data_path
         self.__dict__.update(kwargs)
 
-    def make_loaders(self, workers, batch_size, shuffle_val=False, add_path=False, additional_path=None):
+    def make_loaders(self, workers, batch_size, shuffle_val=False, add_path=False, additional_path=None, add_target=False, index_instead_of_class=False):
         '''
         '''
         return generate_loaders(workers=workers,
@@ -57,7 +57,9 @@ class DataSet(object):
                                 dataset=self.ds_name,
                                 shuffle_val=shuffle_val,
                                 add_path=add_path,
-                                additional_path=additional_path)
+                                additional_path=additional_path,
+                                add_target=add_target,
+                                index_instead_of_class=index_instead_of_class)
     
     def get_model(self, arch, pretrained):
         '''
@@ -84,7 +86,7 @@ class ImageNet9(DataSet):
         train_tr = common_tr + [transforms.RandomResizedCrop(224), transforms.RandomHorizontalFlip(), transforms.ColorJitter(0.4, 0.4, 0.4)]
         ds_kwargs = {
             'num_classes': 9,
-            'mean': ch.tensor([0.4717, 0.4499, 0.3837]), 
+            'mean': ch.tensor([0.4717, 0.4499, 0.3837]),
             'std': ch.tensor([0.2600, 0.2516, 0.2575]),
             'transform_train' : transforms.Compose(train_tr),
             'transform_test': transforms.Compose(common_tr)
@@ -123,7 +125,7 @@ class ImageNetBackgroundChangeAugmented(DataSet):
             for inner_dir in sorted(os.listdir(background_path)):
                 for image_path in sorted(os.listdir(f'{background_path}/{inner_dir}')):
                     backgrounds.append(f'{background_path}/{inner_dir}/{image_path}')
-        self.augmentation = augmentations.RandomBackgroundPerClass([background_transform_chance] * 9, backgrounds)
+        self.augmentation = augmentations.RandomBackgroundChange([background_transform_chance] * 9, backgrounds)
         
         common_tr = [augmentations.UnwrapTupled(), transforms.Resize((224, 224)), transforms.ToTensor()]
         train_tr = [self.augmentation, transforms.RandomResizedCrop(224), transforms.RandomHorizontalFlip(), transforms.ColorJitter(0.4, 0.4, 0.4)]
@@ -138,7 +140,7 @@ class ImageNetBackgroundChangeAugmented(DataSet):
         super().__init__(ds_name,
                 data_path, **ds_kwargs)
    
-    def make_loaders(self, workers, batch_size, shuffle_val=False, add_path=False, additional_path=None):
+    def make_loaders(self, workers, batch_size, shuffle_val=False, add_path=False, additional_path=None, add_target=False, index_instead_of_class=False):
         '''
         '''
         if additional_path is None:
@@ -152,7 +154,9 @@ class ImageNetBackgroundChangeAugmented(DataSet):
                                 dataset=self.ds_name,
                                 shuffle_val=shuffle_val,
                                 add_path=add_path,
-                                additional_path=additional_path)
+                                additional_path=additional_path,
+                                add_target=add_target,
+                                index_instead_of_class=index_instead_of_class)
 
 
 class ImageNetBackgroundBlurAugmented(DataSet):
@@ -163,7 +167,7 @@ class ImageNetBackgroundBlurAugmented(DataSet):
         """
         self.backgrounds_path = backgrounds_path
         self.default_path = data_path
-        self.augmentation = augmentations.RandomBackgroundBlur([background_transform_chance] * 9)
+        self.augmentation = augmentations.RandomBackgroundBlur([background_transform_chance] * 9 if background_transform_chance is not None else None)
 
         common_tr = [augmentations.UnwrapTupled(), transforms.Resize((224, 224)), transforms.ToTensor()]
         train_tr = [self.augmentation, transforms.RandomResizedCrop(224), transforms.RandomHorizontalFlip(), transforms.ColorJitter(0.4, 0.4, 0.4)]
@@ -178,7 +182,7 @@ class ImageNetBackgroundBlurAugmented(DataSet):
         super().__init__(ds_name,
                 foregrounds_path, **ds_kwargs)
    
-    def make_loaders(self, workers, batch_size, shuffle_val=False, add_path=False, additional_path=None):
+    def make_loaders(self, workers, batch_size, shuffle_val=False, add_path=False, additional_path=None, add_target=False, index_instead_of_class=False):
         '''
         '''
         if additional_path is None:
@@ -193,4 +197,6 @@ class ImageNetBackgroundBlurAugmented(DataSet):
                                 shuffle_val=shuffle_val,
                                 add_path=add_path,
                                 additional_path=additional_path,
-                                valid_path=self.default_path)
+                                valid_path=self.default_path,
+                                add_target=add_target,
+                                index_instead_of_class=index_instead_of_class)

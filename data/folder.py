@@ -81,7 +81,7 @@ class DatasetFolder(data.Dataset):
     """
 
     def __init__(self, root, loader, extensions, transform=None,
-                 target_transform=None, label_mapping=None, add_path=False):
+                 target_transform=None, label_mapping=None, add_path=False, add_target=False, index_instead_of_class=False):
         classes, class_to_idx = self._find_classes(root)
         if label_mapping is not None:
             classes, class_to_idx = label_mapping(classes, class_to_idx)
@@ -96,10 +96,12 @@ class DatasetFolder(data.Dataset):
         self.extensions = extensions
 
         self.add_path = add_path
+        self.index_instead_of_class = index_instead_of_class
         self.classes = classes
         self.class_to_idx = class_to_idx
         self.samples = samples
         self.targets = [s[1] for s in samples]
+        self.add_target = add_target
 
         self.transform = transform
         self.target_transform = target_transform
@@ -140,10 +142,17 @@ class DatasetFolder(data.Dataset):
             sample = self.transform(sample)
         if self.target_transform is not None:
             target = self.target_transform(target)
-           
+
+        return self.create_item(path, sample, target, index)
+    
+    def create_item(self, path, sample, target, index):
         if self.add_path:
+            if self.add_target:
+                return (path, sample, target if not self.index_instead_of_class else index), target
             return (path, sample), target
         else:
+            if self.add_target:
+                return (sample, target if not self.index_instead_of_class else index), target
             return sample, target
 
     def __len__(self):
@@ -159,10 +168,11 @@ class DatasetFolder(data.Dataset):
         fmt_str += '{0}{1}'.format(tmp, self.target_transform.__repr__().replace('\n', '\n' + ' ' * len(tmp)))
         return fmt_str
 
+
 class DatasetMultifolder(DatasetFolder):
     def __init__(self, roots, loader, extensions, transform=None,
-                 target_transform=None, label_mapping=None, add_path=False):
-        super().__init__(roots[0], loader, extensions, transform, target_transform, label_mapping, add_path)
+                 target_transform=None, label_mapping=None, add_path=False, add_target=False, index_instead_of_class=False):
+        super().__init__(roots[0], loader, extensions, transform, target_transform, label_mapping, add_path, add_target, index_instead_of_class)
         self.roots = roots
 
     def __getitem__(self, index):
@@ -174,10 +184,8 @@ class DatasetMultifolder(DatasetFolder):
         if self.target_transform is not None:
             target = self.target_transform(target)
         
-        if self.add_path:
-            return (path, sample), target
-        else:
-            return sample, target
+        return self.create_item(path, sample, target, index)
+
 
 IMG_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm', '.tif']
 
@@ -231,22 +239,26 @@ class ImageFolder(DatasetFolder):
         imgs (list): List of (image path, class_index) tuples
     """
     def __init__(self, root, transform=None, target_transform=None,
-                 loader=default_loader, label_mapping=None, add_path=False):
+                 loader=default_loader, label_mapping=None, add_path=False, add_target=False, index_instead_of_class=False):
         super(ImageFolder, self).__init__(root, loader, IMG_EXTENSIONS,
                                           transform=transform,
                                           target_transform=target_transform,
                                           label_mapping=label_mapping,
-                                          add_path=add_path)
+                                          add_path=add_path,
+                                          add_target=add_target,
+                                          index_instead_of_class=index_instead_of_class)
         self.imgs = self.samples
 
 class MultiImageFolder(DatasetMultifolder):
     def __init__(self, root, transform=None, target_transform=None,
-                 loader=default_loader, label_mapping=None, add_path=False):
+                 loader=default_loader, label_mapping=None, add_path=False, add_target=False, index_instead_of_class=False):
         super().__init__(root, loader, IMG_EXTENSIONS,
                                           transform=transform,
                                           target_transform=target_transform,
                                           label_mapping=label_mapping,
-                                          add_path=add_path)
+                                          add_path=add_path,
+                                          add_target=add_target,
+                                          index_instead_of_class=index_instead_of_class)
         self.imgs = self.samples
 
 class TensorDataset(Dataset):
