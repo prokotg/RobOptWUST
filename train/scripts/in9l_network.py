@@ -33,7 +33,6 @@ parser.add_argument('--foregrounds-path', type=str, default='data/only_fg/train'
 
 args = parser.parse_args()
 
-print(args)
 tensorboard_logger = pl_loggers.TensorBoardLogger(args.log_dir, name=f'in9l_{args.network}')
 
 if args.use_background_transform and args.use_background_blur:

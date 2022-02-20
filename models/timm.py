@@ -40,7 +40,6 @@ class TIMMModel(pl.LightningModule):
         if self.save_entropy:
             self.entropy = {}
             for out in outs:
-                print(out)
                 for loss, index in zip(out['losses'], out['indices']):
                     if index not in self.entropy:
                         self.entropy[index] = []

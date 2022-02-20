@@ -24,8 +24,6 @@ args = parser.parse_args()
 
 networks = {'resnet18': [0]}
 
-print(args)
-
 epochs = args.epochs
 save_dir = args.save_directory
 transform_chances = args.chances
