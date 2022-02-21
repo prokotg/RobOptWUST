@@ -1,0 +1,4 @@
+[core]
+    remote = pwrgdrive
+['remote "pwrgdrive"']
+    url = gdrive://1b-T2MDMLWO0d9drlqX2e72pU-AyjPOL0
