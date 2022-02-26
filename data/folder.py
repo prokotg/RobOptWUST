@@ -88,8 +88,9 @@ class DatasetFolder(data.Dataset):
 
         samples = make_dataset(root, class_to_idx, extensions)
         if len(samples) == 0:
-            raise(RuntimeError("Found 0 files in subfolders of: " + root + "\n"
-                               "Supported extensions are: " + ",".join(extensions)))
+            raise (RuntimeError("Found 0 files in subfolders of: " + root + "\n"
+                                                                            "Supported extensions are: " + ",".join(
+                extensions)))
 
         self.root = root
         self.loader = loader
@@ -140,7 +141,7 @@ class DatasetFolder(data.Dataset):
             sample = self.transform(sample)
         if self.target_transform is not None:
             target = self.target_transform(target)
-           
+
         if self.add_path:
             return (path, sample), target
         else:
@@ -159,6 +160,7 @@ class DatasetFolder(data.Dataset):
         fmt_str += '{0}{1}'.format(tmp, self.target_transform.__repr__().replace('\n', '\n' + ' ' * len(tmp)))
         return fmt_str
 
+
 class DatasetMultifolder(DatasetFolder):
     def __init__(self, roots, loader, extensions, transform=None,
                  target_transform=None, label_mapping=None, add_path=False):
@@ -168,16 +170,21 @@ class DatasetMultifolder(DatasetFolder):
     def __getitem__(self, index):
         path, target = self.samples[index]
         sample = self.loader(path)
-        background = self.loader(path.replace(self.roots[0].replace('train', ''), self.roots[1]))
+
+        # TODO: this can be backgrounds too ig (if you use blur, should be renamed alltogetheer)
+        foreground = self.loader(os.path.join(self.roots[1], 'train', os.path.relpath(path, self.root)))
         if self.transform is not None:
-            sample = self.transform((sample, background, target))
+            # here is an assumption that first transformation is applying random background. A transformation that takes
+            # tuple (image, its foreground, target class)
+            sample = self.transform((sample, foreground, target))
         if self.target_transform is not None:
             target = self.target_transform(target)
-        
+
         if self.add_path:
             return (path, sample), target
         else:
             return sample, target
+
 
 IMG_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm', '.tif']
 
@@ -230,6 +237,7 @@ class ImageFolder(DatasetFolder):
         class_to_idx (dict): Dict with items (class_name, class_index).
         imgs (list): List of (image path, class_index) tuples
     """
+
     def __init__(self, root, transform=None, target_transform=None,
                  loader=default_loader, label_mapping=None, add_path=False):
         super(ImageFolder, self).__init__(root, loader, IMG_EXTENSIONS,
@@ -239,15 +247,17 @@ class ImageFolder(DatasetFolder):
                                           add_path=add_path)
         self.imgs = self.samples
 
+
 class MultiImageFolder(DatasetMultifolder):
     def __init__(self, root, transform=None, target_transform=None,
                  loader=default_loader, label_mapping=None, add_path=False):
         super().__init__(root, loader, IMG_EXTENSIONS,
-                                          transform=transform,
-                                          target_transform=target_transform,
-                                          label_mapping=label_mapping,
-                                          add_path=add_path)
+                         transform=transform,
+                         target_transform=target_transform,
+                         label_mapping=label_mapping,
+                         add_path=add_path)
         self.imgs = self.samples
+
 
 class TensorDataset(Dataset):
     """Dataset wrapping tensors.
