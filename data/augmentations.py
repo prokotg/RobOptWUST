@@ -85,23 +85,28 @@ class UpdateChancesBasedOnAccuracyCallback(Callback):
             images = []
             for bg_ind in background_indices:
                 background = TF.pil_to_tensor(folder.default_loader(backgrounds[bg_ind]))
-                if self.use_cuda:
-                    background = background.cuda()
+
                 background = TF.resize(background.float()/255, (224, 224))
                 images.append(background)
             
-            images = torch.stack(images).chunk(4)
-            true_y = np.array_split((background_indices / (len(backgrounds) / classes_count)).astype('int'), 4)
+            true_y = np.array_split((background_indices / (len(backgrounds) / classes_count)).astype('int'), 1)
             corrects = [0] * classes_count
             counts = [0] * classes_count
             for im, tr_y in zip(images, true_y):
-                ans = self.model(im, )
+                if self.use_cuda:
+                    im = im.cuda()
+                ans = self.model(im.unsqueeze(0), )
+                if self.use_cuda:
+                    im.detach().to('cpu')
+                    ans.to('cpu')
                 for a, y in zip(ans, tr_y):
                     counts[y] += 1
                     if torch.argmax(a) == y:
                         corrects[y] += 1
             
             for i in range(classes_count):
+                if counts[i] == 0:
+                    counts[i] += 1
                 if self.reverse_chances:
                     self.augmentation.augment_chances[i] = 1 - corrects[i] / counts[i]
                 else:
@@ -140,6 +145,7 @@ class UpdateChancesBasedOnPerSampleEntropyCallback(Callback):
             else:
                 entropy = calculate_entropy(self.dataloader, self.model, self.use_cuda)
             augment_chances = {}
+            
             for i in entropy:
                 if self.reverse_chances:
                     augment_chances[i] = 1 - np.array(entropy[i]).mean()
@@ -171,7 +177,7 @@ class UpdateChancesBasedOnEntropyTakeTopCallback(Callback):
             for i in entropy:
                 average_entropy[i] = np.array(entropy[i]).mean()
             
-            taken = sorted(average_entropy.keys(), lambda k : average_entropy[k], reverse=not reverse_chances)[0:int(len(average_entropy) * self.top_to_take)]
+            taken = sorted(average_entropy.keys(), key=lambda k : average_entropy[k], reverse=not self.reverse_chances)[0:int(len(average_entropy) * self.top_to_take)]
             augment_chances = {}
             for i in average_entropy:
                 if i in taken:

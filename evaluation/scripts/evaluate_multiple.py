@@ -15,6 +15,7 @@ networks_dir = args.networks_path
 logs_dir = args.logs_path
 is_parametrized = args.is_parametrized
 
+print(networks_dir)
 for net_type in os.listdir(networks_dir):
 	if os.path.isdir(f'{networks_dir}/{net_type}'):
 		os.makedirs(f'{logs_dir}/{net_type}/', exist_ok=True)

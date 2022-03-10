@@ -23,9 +23,22 @@ class TIMMModel(pl.LightningModule):
             (path, x), y = train_batch
         y_hat = self(x)
         loss = F.cross_entropy(y_hat, y, reduction='none')
+        
         self.log('train_loss', loss.mean())
         self.log('train_acc', self.accuracy(y_hat, y), prog_bar=True)
-        return {'loss' : loss.mean(), 'indices' : indices, 'losses' : loss.detach()}
+        return {'loss' : loss.mean(), 'indices' : indices.detach().cpu().clone(), 'losses' : loss.detach().cpu().clone()}
+    
+    def on_train_start(self):
+        if self.save_entropy:
+            self.entropy = {}
+    
+    def training_step_end(self, out):
+        if self.save_entropy:
+            for loss, index in zip(out['losses'], out['indices']):
+                index = index.cpu().detach().item()
+                if index not in self.entropy:
+                    self.entropy[index] = []
+                self.entropy[index].append(loss.detach().cpu())
 
     def validation_step(self, val_batch, batch_idx):
         (path, x), y = val_batch
@@ -37,13 +50,6 @@ class TIMMModel(pl.LightningModule):
 
     def training_epoch_end(self, outs):
         self.log('train_acc_epoch', self.accuracy.compute())
-        if self.save_entropy:
-            self.entropy = {}
-            for out in outs:
-                for loss, index in zip(out['losses'], out['indices']):
-                    if index not in self.entropy:
-                        self.entropy[index] = []
-                    self.entropy[index].append(loss)
     
     def configure_optimizers(self):
         optimizer = torch.optim.SGD(self.parameters(), lr=0.1, weight_decay=1e-4, momentum=0.9)

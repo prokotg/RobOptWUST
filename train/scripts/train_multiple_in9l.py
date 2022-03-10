@@ -4,7 +4,7 @@ import argparse
 
 parser = argparse.ArgumentParser(description='Train multiple networks with a bit of possible out-of-the-script-configuration!')
 parser.add_argument('-d', '--dataset-path', type=str, default='data/original/')
-parser.add_argument('-s', '--save-directory', type=str, default='/home/macron/Praca Magisterska/Kod/augm_es_batch_test_no')
+parser.add_argument('-s', '--save-directory', type=str, default='/home/maciejziolkowski/auto-acc-bgch')
 parser.add_argument('-l', '--log-dir', type=str, default='logs/')
 parser.add_argument('-g', '--gpus', type=int, default=1)
 parser.add_argument('-e', '--epochs', type=int, default=30)
