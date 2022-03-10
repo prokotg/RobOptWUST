@@ -1,3 +1,5 @@
+import os
+
 from cv2 import cv2
 import torch
 from . import folder
@@ -27,9 +29,10 @@ def calculate_mask(img):
 
 
 class RandomBackgroundPerClass(object):
-    def __init__(self, augment_chances, backgrounds_paths):
+    def __init__(self, augment_chances, backgrounds_paths, return_metadata=False):
         self.augment_chances = augment_chances
         self.backgrounds_paths = backgrounds_paths
+        self.return_metadata = return_metadata
 
     def __call__(self, sample):
         if type(sample) is not tuple:
@@ -37,9 +40,13 @@ class RandomBackgroundPerClass(object):
             return TF.to_tensor(sample)
         image, backgroundless, target = sample
         augmentation_chance = torch.rand(1)
-        if augmentation_chance < self.augment_chances[target]:
+        mask = np.zeros_like(image)
+        background_class = -1
+        if augmentation_chance < 100 * self.augment_chances[target]:
             image = backgroundless.copy()
             background_id = torch.randint(0, len(self.backgrounds_paths), (1,))
+            #  example background path '...\only_bg_t\\only_bg_t\\/train/00_dog/n02085936_2693.JPEG'
+            background_class = int(os.path.split(os.path.dirname(self.backgrounds_paths[background_id]))[-1].split('_')[0])
             background = TF.pil_to_tensor(folder.default_loader(self.backgrounds_paths[background_id]))
             background = TF.resize(background, (224, 224))
             image = TF.resize(image, (224, 224))
@@ -50,6 +57,8 @@ class RandomBackgroundPerClass(object):
         else:
             image = TF.resize(image, (224, 224))
             image = TF.to_tensor(image)
+        if self.return_metadata:
+            return image, mask, background_class
         return image
 
 

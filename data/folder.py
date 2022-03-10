@@ -1,12 +1,14 @@
-import torch.utils.data as data
-from torch.utils.data import Dataset
-from torchvision import transforms
-
-from PIL import Image
-
 import os
 import os.path
 import sys
+
+import torch.utils.data as data
+import torchvision.transforms
+from PIL import Image
+from torch.utils.data import Dataset
+from torchvision import transforms
+
+from augmentations import RandomBackgroundPerClass
 
 
 def has_file_allowed_extension(filename, extensions):
@@ -184,6 +186,35 @@ class DatasetMultifolder(DatasetFolder):
             return (path, sample), target
         else:
             return sample, target
+
+
+class BackgroundReplacementDataset(DatasetMultifolder):
+    def __init__(self, roots, loader, extensions, transform=None,
+                 target_transform=None, label_mapping=None, add_path=False):
+        super().__init__(roots, loader, extensions, transform, target_transform, label_mapping, add_path)
+        assert transform is not None, "Must be at least background replacement"
+        self.background_transform: RandomBackgroundPerClass = self.transform[0]
+        self.image_transform = torchvision.transforms.Compose(self.transform.transforms[1:])
+        self.background_transform.return_metadata = True
+
+    def __getitem__(self, index):
+        path, target = self.samples[index]
+        sample = self.loader(path)
+
+        # TODO: this can be backgrounds too ig (if you use blur, should be renamed alltogetheer)
+        background = self.loader(os.path.join(self.roots[1], 'train', os.path.relpath(path, self.root)))
+        # here is an assumption that first transformation is applying random background. A transformation that takes
+        # tuple (image, its foreground, target class)
+        image_w_rand_back, mask, background_class = self.background_transform((sample, background, target))
+        sample = self.transform(image_w_rand_back)
+
+        if self.target_transform is not None:
+            target = self.target_transform(target)
+
+        if self.add_path:
+            return (path, sample), target, mask, background_class
+        else:
+            return sample, target, mask, background_class
 
 
 IMG_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm', '.tif']

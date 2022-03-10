@@ -17,6 +17,8 @@ def make_loader(workers, batch_size, transforms, data_path, name, shuffle_val=Fa
         set_folder = folder.ImageFolder(root=path, transform=transforms, add_path=add_path)
     else:
         set_folder = folder.MultiImageFolder(root=[path, additional_path], transform=transforms, add_path=add_path)
+    # if decouple, make background image dataset
+
     loader = DataLoader(set_folder, batch_size=batch_size, shuffle=shuffle_val, num_workers=workers, pin_memory=True)
 
     return loader
