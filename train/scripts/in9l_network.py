@@ -23,17 +23,19 @@ if __name__ == "__main__":
     parser.add_argument('-t', '--use-background-transform', type=bool, default=False)
     parser.add_argument('-b', '--use-background-blur', type=bool, default=False)
     parser.add_argument('--use-auto-background-transform', type=bool, default=False)
+    parser.add_argument('--use-background-replacement-metadata', default=False, action='store_true')
     parser.add_argument('--background-transform-chance', type=float, default=0.0)
     parser.add_argument('--augmentation-checking-dataset-size', type=float, default=0.2)
-    parser.add_argument('--backgrounds-path', type=str, default='data/only_bg_t/train')
-    parser.add_argument('--foregrounds-path', type=str, default='data/only_fg/train')
+    parser.add_argument('--backgrounds-path', type=str, default='data/only_bg_t/')
+    parser.add_argument('--foregrounds-path', type=str, default='data/only_fg/')
 
     args = parser.parse_args()
 
     tensorboard_logger = pl_loggers.TensorBoardLogger(args.log_dir, name=f'in9l_{args.network}')
 
-    if args.use_background_transform and args.use_background_blur:
-        print('Do not use both of the augmentation in the same time!')
+    assert (1 if args.use_background_transform else 0) + (1 if args.use_background_blur else 0) <= 1, 'Do not use two of the augmentation in the same time!'
+    assert args.use_background_transform if args.use_background_replacement_metadata else True, 'Background replacement metadata must be used along with background transforms!'
+    
     if args.use_background_transform:
         imagenet_dataset = ImageNet9.ImageNetBackgroundChangeAugmented(args.dataset_path, args.backgrounds_path, args.foregrounds_path, args.background_transform_chance)
     elif args.use_background_blur:
@@ -41,8 +43,7 @@ if __name__ == "__main__":
     else:
         imagenet_dataset = ImageNet9.ImageNet9(args.dataset_path)
 
-
-    train_loader, val_loader = imagenet_dataset.make_loaders(batch_size=64, workers=args.workers, add_path=True)
+    train_loader, val_loader = imagenet_dataset.make_loaders(batch_size=64, workers=args.workers, add_path=True, use_background_replacement=args.use_background_replacement_metadata, additional_path=args.foregrounds_path if args.use_background_replacement_metadata else None)
     model = TIMMModel(timm.create_model(args.network, pretrained=False, num_classes=9))
 
     callbacks = []

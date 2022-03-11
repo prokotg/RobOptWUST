@@ -3,21 +3,25 @@ import os
 from torchvision import transforms
 from . import folder
 from . import augmentations
-import time
 from torch.utils.data import DataLoader
 
 
-def make_loader(workers, batch_size, transforms, data_path, name, shuffle_val=False, add_path=False,
-                additional_path=None):
+def make_loader(workers, batch_size, transforms, data_path, name, shuffle_val=False,
+                add_path=False, use_background_replacement=False, additional_path=None):
     path = os.path.join(data_path, name)
     if not os.path.exists(path):
         raise ValueError("{1} data must be stored in {0}".format(path, name))
 
+    assert not (use_background_replacement and additional_path is None), 'When using background replacement dataset, specify with additional_path where to take the backgrounds from'
+
     if additional_path is None:
         set_folder = folder.ImageFolder(root=path, transform=transforms, add_path=add_path)
     else:
-        set_folder = folder.MultiImageFolder(root=[path, additional_path], transform=transforms, add_path=add_path)
-    # if decouple, make background image dataset
+        if use_background_replacement:
+            set_folder = folder.BackgroundReplacementDataset(roots=[path, additional_path], transform=transforms, add_path=add_path)
+        else:
+            set_folder = folder.MultiImageFolder(root=[path, additional_path], transform=transforms, add_path=add_path)
+        # if decouple, make background image dataset
 
     loader = DataLoader(set_folder, batch_size=batch_size, shuffle=shuffle_val, num_workers=workers, pin_memory=True)
 
@@ -25,13 +29,13 @@ def make_loader(workers, batch_size, transforms, data_path, name, shuffle_val=Fa
 
 
 def generate_loaders(workers, batch_size, transform_train, transform_test, data_path, dataset,
-                     shuffle_val=False, add_path=False, additional_path=None):
+                     shuffle_val=False, add_path=False, use_background_replacement=False, additional_path=None):
     '''
     '''
     print(f"==> Preparing dataset {dataset}..")
 
     train_loader = make_loader(workers, batch_size, transform_train, data_path, 'train', True, add_path=add_path,
-                               additional_path=additional_path)
+                               additional_path=additional_path, use_background_replacement=use_background_replacement)
     test_loader = make_loader(workers, batch_size, transform_test, data_path, 'val', shuffle_val, add_path=add_path)
     return train_loader, test_loader
 
@@ -50,7 +54,7 @@ class DataSet(object):
         self.data_path = data_path
         self.__dict__.update(kwargs)
 
-    def make_loaders(self, workers, batch_size, shuffle_val=False, add_path=False, additional_path=None):
+    def make_loaders(self, workers, batch_size, shuffle_val=False, add_path=False, use_background_replacement=False, additional_path=None):
         '''
         '''
         return generate_loaders(workers=workers,
@@ -61,6 +65,7 @@ class DataSet(object):
                                 dataset=self.ds_name,
                                 shuffle_val=shuffle_val,
                                 add_path=add_path,
+                                use_background_replacement=use_background_replacement,
                                 additional_path=additional_path)
 
     def get_model(self, arch, pretrained):
@@ -121,7 +126,23 @@ class ImageNet(DataSet):
                                        data_path, **ds_kwargs)
 
 
-class ImageNetBackgroundChangeAugmented(DataSet):
+class DataSetBackgroundAugmented(DataSet):
+    def make_loaders(self, workers, batch_size, shuffle_val=False, add_path=False, use_background_replacement=False, additional_path=None):
+        if additional_path is None:
+            additional_path = self.foregrounds_path
+        return generate_loaders(workers=workers,
+                                batch_size=batch_size,
+                                transform_train=self.transform_train,
+                                transform_test=self.transform_test,
+                                data_path=self.data_path,
+                                dataset=self.ds_name,
+                                shuffle_val=shuffle_val,
+                                add_path=add_path,
+                                use_background_replacement=use_background_replacement,
+                                additional_path=additional_path)
+
+
+class ImageNetBackgroundChangeAugmented(DataSetBackgroundAugmented):
     '''
     '''
 
@@ -150,24 +171,8 @@ class ImageNetBackgroundChangeAugmented(DataSet):
         super().__init__(ds_name,
                          data_path, **ds_kwargs)
 
-    def make_loaders(self, workers, batch_size, shuffle_val=False, add_path=False, additional_path=None):
-        '''
-        '''
-        if additional_path is None:
-            additional_path = self.foregrounds_path
-        transforms = self.transform_test
-        return generate_loaders(workers=workers,
-                                batch_size=batch_size,
-                                transform_train=self.transform_train,
-                                transform_test=self.transform_test,
-                                data_path=self.data_path,
-                                dataset=self.ds_name,
-                                shuffle_val=shuffle_val,
-                                add_path=add_path,
-                                additional_path=additional_path)
 
-
-class ImageNetBackgroundBlurAugmented(DataSet):
+class ImageNetBackgroundBlurAugmented(DataSetBackgroundAugmented):
     '''
     '''
 
@@ -191,20 +196,3 @@ class ImageNetBackgroundBlurAugmented(DataSet):
         }
         super().__init__(ds_name,
                          foregrounds_path, **ds_kwargs)
-
-    def make_loaders(self, workers, batch_size, shuffle_val=False, add_path=False, additional_path=None):
-        '''
-        '''
-        if additional_path is None:
-            additional_path = self.backgrounds_path
-        transforms = self.transform_test
-        return generate_loaders(workers=workers,
-                                batch_size=batch_size,
-                                transform_train=self.transform_train,
-                                transform_test=self.transform_test,
-                                data_path=self.data_path,
-                                dataset=self.ds_name,
-                                shuffle_val=shuffle_val,
-                                add_path=add_path,
-                                additional_path=additional_path,
-                                valid_path=self.default_path)
