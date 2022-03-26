@@ -1,12 +1,14 @@
 import argparse
 import timm
-import pickle
+import pickle as pkl
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader
-from torchvision import transforms
+from torchvision import transforms, models
 from pytorch_lightning import loggers as pl_loggers
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from models.timm import TIMMModel
+from models.flow import FlowModel, ConditionalNICE
+from torch import nn
 from data.augmentations import UpdateChancesBasedOnAccuracyCallback
 import data.imagenet as ImageNet9
 
@@ -23,10 +25,12 @@ if __name__ == "__main__":
     parser.add_argument('-t', '--use-background-transform', type=bool, default=False)
     parser.add_argument('-b', '--use-background-blur', type=bool, default=False)
     parser.add_argument('--use-auto-background-transform', type=bool, default=False)
+    parser.add_argument('--use-swap-background-minibatch-loader', type=bool, default=False)
     parser.add_argument('--background-transform-chance', type=float, default=0.0)
     parser.add_argument('--augmentation-checking-dataset-size', type=float, default=0.2)
     parser.add_argument('--backgrounds-path', type=str, default='data/only_bg_t/train')
     parser.add_argument('--foregrounds-path', type=str, default='data/only_fg/train')
+    parser.add_argument('--base-model-path', type=str, default='networks/network.pkl')
 
     args = parser.parse_args()
 
@@ -39,11 +43,38 @@ if __name__ == "__main__":
     elif args.use_background_blur:
         imagenet_dataset = ImageNet9.ImageNetBackgroundBlurAugmented(args.dataset_path, args.backgrounds_path, args.foregrounds_path, args.background_transform_chance)
     else:
-        imagenet_dataset = ImageNet9.ImageNet9(args.dataset_path)
+        imagenet_dataset = ImageNet9.ImageNet9(args.dataset_path, divide_transforms=args.use_swap_background_minibatch_loader)
+    
+    train_loader, val_loader = imagenet_dataset.make_loaders(batch_size=64, workers=args.workers, add_path=True, use_swap_background_minibatch_loader=args.use_swap_background_minibatch_loader, additional_paths=[args.backgrounds_path, args.foregrounds_path] if args.use_swap_background_minibatch_loader else None)
 
-
-    train_loader, val_loader = imagenet_dataset.make_loaders(batch_size=64, workers=args.workers, add_path=True)
-    model = TIMMModel(timm.create_model(args.network, pretrained=False, num_classes=9))
+    if False:
+        model = TIMMModel(timm.create_model(args.network, pretrained=False, num_classes=9))
+    else:
+        if False:
+            model_file = open(args.base_model_path, 'rb')
+            base_model = pkl.load(model_file)
+            last_layer_size = len(base_model[-1].bias)
+            model_file.close()
+        else:
+            base_model = models.resnet50(pretrained=True)
+            last_layer_size = base_model.fc.weight.shape[1]
+            base_model.fc = nn.Identity()
+        
+        for p in base_model.parameters():
+            p.requires_grad = False
+        embedding_size = 100
+        
+        model = FlowModel(base_model,
+        nn.Sequential(
+            nn.Linear(last_layer_size, 400),
+            nn.ReLU(),
+            nn.Linear(400, embedding_size),
+        ), nn.Sequential(
+            nn.Linear(embedding_size, 100),
+            nn.ReLU(),
+            nn.Linear(100, 9),
+            nn.ReLU()
+        ), 9, flow=ConditionalNICE(embedding_size, hidden_sizes=[100, 100, 100], num_layers=4, conditional_count=embedding_size), embedding_size=embedding_size)
 
     callbacks = []
     if args.use_auto_background_transform:
@@ -54,5 +85,5 @@ if __name__ == "__main__":
 
     print(args.save_path)
     model_file = open(args.save_path, 'wb')
-    pickle.dump(model, model_file)
+    pkl.dump(model, model_file)
     model_file.close()
