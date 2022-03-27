@@ -45,7 +45,7 @@ if __name__ == "__main__":
     else:
         imagenet_dataset = ImageNet9.ImageNet9(args.dataset_path, divide_transforms=args.use_swap_background_minibatch_loader)
     
-    train_loader, val_loader = imagenet_dataset.make_loaders(batch_size=64, workers=args.workers, add_path=True, use_swap_background_minibatch_loader=args.use_swap_background_minibatch_loader, additional_paths=[args.backgrounds_path, args.foregrounds_path] if args.use_swap_background_minibatch_loader else None)
+    train_loader, val_loader = imagenet_dataset.make_loaders(batch_size=8, workers=args.workers, add_path=True, use_swap_background_minibatch_loader=args.use_swap_background_minibatch_loader, additional_paths=[args.backgrounds_path, args.foregrounds_path] if args.use_swap_background_minibatch_loader else None)
 
     if False:
         model = TIMMModel(timm.create_model(args.network, pretrained=False, num_classes=9))
@@ -71,9 +71,8 @@ if __name__ == "__main__":
             nn.Linear(400, embedding_size),
         ), nn.Sequential(
             nn.Linear(embedding_size, 100),
-            nn.ReLU(),
-            nn.Linear(100, 9),
-            nn.ReLU()
+            nn.Softmax(),
+            nn.Linear(100, 9)
         ), 9, flow=ConditionalNICE(embedding_size, hidden_sizes=[100, 100, 100], num_layers=4, conditional_count=embedding_size), embedding_size=embedding_size)
 
     callbacks = []

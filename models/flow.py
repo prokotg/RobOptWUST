@@ -11,13 +11,18 @@ from nflows.transforms.base import CompositeTransform
 from nflows.distributions.normal import ConditionalDiagonalNormal
 
 
+class FlowableMLP(MLP):
+    def forward(self, input, context):
+        return super().forward(torch.cat((input, context), dim=1))
+
+
 class ConditionalNICE(Flow):
     def __init__(self, features, hidden_sizes, num_layers, conditional_count):
         mask = torch.ones(features)
         layers = []
         mask[::2] = -1
         for _ in range(num_layers):
-            layers.append(AffineCouplingTransform(mask=mask, transform_net_create_fn=lambda x, y: MLP(torch.zeros(x).shape, torch.zeros(y).shape, hidden_sizes)))
+            layers.append(AffineCouplingTransform(mask=mask, transform_net_create_fn=lambda x, y: FlowableMLP(torch.zeros(x + features).shape, torch.zeros(y).shape, hidden_sizes)))
             mask *= -1
         
         super().__init__(
@@ -53,10 +58,13 @@ class EmbeddingNICEModel(pl.LightningModule):
         return loss
 
 
+
 class FlowModel(pl.LightningModule):
         
     def _default_y_selector(z):
-        return torch.sum(z, dim=2)
+        if len(z.shape) == 2:
+            return z
+        return z.sum(dim=1)
 
     def __init__(self, base_model, embedding_model, classifier_model, class_count, flow, embedding_size=100, z_count=100, y_selector=_default_y_selector):
         super().__init__()
@@ -79,30 +87,49 @@ class FlowModel(pl.LightningModule):
         return embeddings
     
     def forward(self, x):
+        shape = x.shape
+        if len(shape) == 5:
+            x = x.flatten(0, 1)
         x = self.base_model(x)
         x = self.embedding_model(x)
-        z = self.generate_zs(x)
-        ys = self.classifier_model(z)
-        y = self.y_selector(ys)
-        return y
-    
-    def generate_zs(self, z0):
+        if len(shape) == 5:
+            x = torch.reshape(x, shape[0:2] + x.shape[1:])
+        
+        log_prob = None
+        result = []
+        for x_ in x:
+            z, l_p = self.generate_zs(x_[0], x_) if len(x_.shape) == 2 else self.generate_zs(x_)
+            ys = self.classifier_model(z)
+            y = self.y_selector(ys)
+            result.append(y)
+            if log_prob is None:
+                log_prob = l_p
+            else:
+                log_prob += l_p
+        return F.softmax(torch.stack(result).sum(dim=1), dim=1), log_prob
+        
+    def generate_zs(self, z0, additional_examples=None):
         context = self.get_context(z0)
-        #zs = self.flow.sample(self.z_count - 1, context=context)
-        return z0.unsqueeze(1) #torch.cat((z0.unsqueeze(0), zs), dim=0)
+        if additional_examples is not None:
+            log_prob = self.flow.log_prob(additional_examples, context=context.repeat([len(additional_examples), 1]))
+            log_prob = log_prob.sum()
+        else:
+            log_prob = 0
+        zs = self.flow.sample(self.z_count - 1, context=context.unsqueeze(0))
+        return torch.cat((z0.unsqueeze(0), zs.squeeze(0)), dim=0), log_prob
 
     def training_step(self, train_batch, batch_idx):
         (path, x), y = train_batch
-        y_hat = self(x)
-        loss = F.cross_entropy(y_hat, y)
+        y_hat, log_prob = self(x)
+        loss = - log_prob * 0.000001 + F.cross_entropy(y_hat, y)
         self.log('train_loss', loss)
         self.log('train_acc', self.accuracy(y_hat, y), prog_bar=True)
         return loss
 
     def validation_step(self, val_batch, batch_idx):
         (path, x), y = val_batch
-        y_hat = self(x)
-        loss = F.cross_entropy(y_hat, y)
+        y_hat, log_prob = self(x)
+        loss = F.cross_entropy(y_hat, y) - log_prob * 0.00001
         self.log('val_loss', loss)
         self.log('val_acc', self.accuracy(y_hat, y), prog_bar=True)
         return loss
