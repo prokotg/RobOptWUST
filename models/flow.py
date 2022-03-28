@@ -3,6 +3,7 @@ from torch import nn
 from torch.nn import functional as F
 import pytorch_lightning as pl
 import torchmetrics
+from torchvision.utils import save_image, make_grid
 from nflows.transforms.coupling import AffineCouplingTransform
 from nflows import transforms, distributions, flows
 from nflows.flows.base import Flow
@@ -62,9 +63,9 @@ class EmbeddingNICEModel(pl.LightningModule):
 class FlowModel(pl.LightningModule):
         
     def _default_y_selector(z):
-        if len(z.shape) == 2:
+        if len(z.shape) == 1:
             return z
-        return z.sum(dim=1)
+        return z.mean(dim=0)
 
     def __init__(self, base_model, embedding_model, classifier_model, class_count, flow, embedding_size=100, z_count=100, y_selector=_default_y_selector):
         super().__init__()
@@ -95,33 +96,37 @@ class FlowModel(pl.LightningModule):
         if len(shape) == 5:
             x = torch.reshape(x, shape[0:2] + x.shape[1:])
         
-        log_prob = None
+        log_probs = []
         result = []
         for x_ in x:
             z, l_p = self.generate_zs(x_[0], x_) if len(x_.shape) == 2 else self.generate_zs(x_)
             ys = self.classifier_model(z)
+            #print(ys)
             y = self.y_selector(ys)
+
             result.append(y)
-            if log_prob is None:
-                log_prob = l_p
-            else:
-                log_prob += l_p
-        return F.softmax(torch.stack(result).sum(dim=1), dim=1), log_prob
+            log_probs.append(l_p)
+        print(y)
+        return F.softmax(torch.stack(result), dim=1), torch.mean(torch.stack(log_probs))
         
-    def generate_zs(self, z0, additional_examples=None):
+    def generate_zs(self, z0, background_batch=None):
         context = self.get_context(z0)
-        if additional_examples is not None:
-            log_prob = self.flow.log_prob(additional_examples, context=context.repeat([len(additional_examples), 1]))
-            log_prob = log_prob.sum()
-        else:
-            log_prob = 0
+        if background_batch is not None:
+            log_prob = self.flow.log_prob(background_batch, context=context.repeat([len(background_batch), 1]))
+            log_prob = log_prob.mean()
+            return background_batch, log_prob # z0.repeat([len(background_batch), 1]), log_prob
+
+        log_prob = torch.zeros(1)
         zs = self.flow.sample(self.z_count - 1, context=context.unsqueeze(0))
         return torch.cat((z0.unsqueeze(0), zs.squeeze(0)), dim=0), log_prob
 
     def training_step(self, train_batch, batch_idx):
         (path, x), y = train_batch
+        #save_image(make_grid(x[0], nrow=8), "r1.jpg")
+        #save_image(make_grid(x.flatten(0, 1), nrow=8), "file.jpg")
         y_hat, log_prob = self(x)
-        loss = - log_prob * 0.000001 + F.cross_entropy(y_hat, y)
+        loss = F.cross_entropy(y_hat, y) * 1 - log_prob * 0.001
+        #print(f'Losses: {log_prob}, { F.cross_entropy(y_hat, y)}, sum: {loss}')
         self.log('train_loss', loss)
         self.log('train_acc', self.accuracy(y_hat, y), prog_bar=True)
         return loss
@@ -129,7 +134,7 @@ class FlowModel(pl.LightningModule):
     def validation_step(self, val_batch, batch_idx):
         (path, x), y = val_batch
         y_hat, log_prob = self(x)
-        loss = F.cross_entropy(y_hat, y) - log_prob * 0.00001
+        loss = F.cross_entropy(y_hat, y) - log_prob * 0.01
         self.log('val_loss', loss)
         self.log('val_acc', self.accuracy(y_hat, y), prog_bar=True)
         return loss
@@ -138,7 +143,5 @@ class FlowModel(pl.LightningModule):
         self.log('train_acc_epoch', self.accuracy.compute())
     
     def configure_optimizers(self):
-        optimizer = torch.optim.SGD(self.parameters(), lr=0.1, weight_decay=1e-4, momentum=0.9)
-        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.1)
-
-        return [optimizer], [scheduler]
+        optimizer = torch.optim.Adam(self.parameters(), lr=0.0001)
+        return optimizer

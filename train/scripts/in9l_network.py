@@ -66,14 +66,15 @@ if __name__ == "__main__":
         
         model = FlowModel(base_model,
         nn.Sequential(
-            nn.Linear(last_layer_size, 400),
+            nn.Linear(last_layer_size, 512),
             nn.ReLU(),
-            nn.Linear(400, embedding_size),
+            nn.Linear(512, embedding_size),
+            nn.Sigmoid(),
         ), nn.Sequential(
-            nn.Linear(embedding_size, 100),
-            nn.Softmax(),
-            nn.Linear(100, 9)
-        ), 9, flow=ConditionalNICE(embedding_size, hidden_sizes=[100, 100, 100], num_layers=4, conditional_count=embedding_size), embedding_size=embedding_size)
+            nn.Linear(embedding_size, 128),
+            nn.Sigmoid(),
+            nn.Linear(128, 9)
+        ), 9, flow=ConditionalNICE(embedding_size, hidden_sizes=[256, 256, 256], num_layers=4, conditional_count=embedding_size), embedding_size=embedding_size, z_count=2)
 
     callbacks = []
     if args.use_auto_background_transform:
