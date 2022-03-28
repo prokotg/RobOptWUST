@@ -63,9 +63,9 @@ class EmbeddingNICEModel(pl.LightningModule):
 class FlowModel(pl.LightningModule):
         
     def _default_y_selector(z):
-        if len(z.shape) == 1:
+        if len(z.shape) == 2:
             return z
-        return z.mean(dim=0)
+        return z.mean(dim=1)
 
     def __init__(self, base_model, embedding_model, classifier_model, class_count, flow, embedding_size=100, z_count=100, y_selector=_default_y_selector):
         super().__init__()
@@ -96,29 +96,21 @@ class FlowModel(pl.LightningModule):
         if len(shape) == 5:
             x = torch.reshape(x, shape[0:2] + x.shape[1:])
         
-        log_probs = []
-        result = []
-        for x_ in x:
-            z, l_p = self.generate_zs(x_[0], x_) if len(x_.shape) == 2 else self.generate_zs(x_)
-            ys = self.classifier_model(z)
-            #print(ys)
-            y = self.y_selector(ys)
-
-            result.append(y)
-            log_probs.append(l_p)
-        print(y)
-        return F.softmax(torch.stack(result), dim=1), torch.mean(torch.stack(log_probs))
+        z, log_probs = self.generate_zs(x[:, 0], x) if len(x.shape) == 3 else self.generate_zs(x)
+        ys = self.classifier_model(z)
+        y = self.y_selector(ys)
+        return F.softmax(y, dim=1), torch.mean(log_probs)
         
-    def generate_zs(self, z0, background_batch=None):
-        context = self.get_context(z0)
+    def generate_zs(self, z0s, background_batch=None):
+        context = self.get_context(z0s)
         if background_batch is not None:
-            log_prob = self.flow.log_prob(background_batch, context=context.repeat([len(background_batch), 1]))
+            log_prob = self.flow.log_prob(background_batch.flatten(0, 1), context=context.repeat([background_batch.shape[1], 1]))
             log_prob = log_prob.mean()
-            return background_batch, log_prob # z0.repeat([len(background_batch), 1]), log_prob
+            return background_batch, log_prob
 
         log_prob = torch.zeros(1)
-        zs = self.flow.sample(self.z_count - 1, context=context.unsqueeze(0))
-        return torch.cat((z0.unsqueeze(0), zs.squeeze(0)), dim=0), log_prob
+        zs = self.flow.sample(self.z_count - 1, context=context)
+        return torch.cat((z0s.unsqueeze(1), zs), dim=1), log_prob
 
     def training_step(self, train_batch, batch_idx):
         (path, x), y = train_batch
