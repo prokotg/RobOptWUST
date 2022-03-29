@@ -26,6 +26,8 @@ if __name__ == "__main__":
     parser.add_argument('-b', '--use-background-blur', type=bool, default=False)
     parser.add_argument('--use-auto-background-transform', type=bool, default=False)
     parser.add_argument('--use-swap-background-minibatch-loader', type=bool, default=False)
+    parser.add_argument('--use-flow-model', type=bool, default=False)
+    parser.add_argument('--use-loaded-model', type=bool, default=False)
     parser.add_argument('--background-transform-chance', type=float, default=0.0)
     parser.add_argument('--augmentation-checking-dataset-size', type=float, default=0.2)
     parser.add_argument('--backgrounds-path', type=str, default='data/only_bg_t/train')
@@ -47,10 +49,13 @@ if __name__ == "__main__":
     
     train_loader, val_loader = imagenet_dataset.make_loaders(batch_size=8, workers=args.workers, add_path=True, use_swap_background_minibatch_loader=args.use_swap_background_minibatch_loader, additional_paths=[args.backgrounds_path, args.foregrounds_path] if args.use_swap_background_minibatch_loader else None)
 
-    if False:
+    if not args.use_flow_model:
         model = TIMMModel(timm.create_model(args.network, pretrained=False, num_classes=9))
     else:
-        if False:
+        # Hiperparametry - 
+        #   - z_count - czyli jak dużo ma dogenerować obrazków z flowa
+        #   - SwapBackgroundFolder ma argument changed_backgrounds_count nigdzie nie wypuszczony, mówiący ile ma być obrazków z podmienionymi tłami w minibatchu
+        if args.use_loaded_model:
             model_file = open(args.base_model_path, 'rb')
             base_model = pkl.load(model_file)
             last_layer_size = len(base_model[-1].bias)
@@ -62,7 +67,7 @@ if __name__ == "__main__":
         
         for p in base_model.parameters():
             p.requires_grad = False
-        embedding_size = 100
+        embedding_size = 256
         
         model = FlowModel(base_model,
         nn.Sequential(
@@ -73,8 +78,9 @@ if __name__ == "__main__":
         ), nn.Sequential(
             nn.Linear(embedding_size, 128),
             nn.Sigmoid(),
-            nn.Linear(128, 9)
-        ), 9, flow=ConditionalNICE(embedding_size, hidden_sizes=[256, 256, 256], num_layers=4, conditional_count=embedding_size), embedding_size=embedding_size, z_count=2)
+            nn.Linear(128, 9),
+            nn.Sigmoid()
+        ), 9, flow=ConditionalNICE(embedding_size, hidden_sizes=[256, 256, 256], num_layers=4, conditional_count=embedding_size), embedding_size=embedding_size, z_count=32)
 
     callbacks = []
     if args.use_auto_background_transform:

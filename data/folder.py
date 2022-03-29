@@ -232,7 +232,7 @@ class MultiImageFolder(DatasetMultifolder):
 
 
 class SwapBackgroundFolder(data.Dataset):
-    def __init__(self, root, backgrounds, foregrounds, loader=default_loader, changed_backgrounds_count=7, pre_transform=None,
+    def __init__(self, root, backgrounds, foregrounds, loader=default_loader, changed_backgrounds_count=8, pre_transform=None,
                  post_transform=None, target_transform=None, label_mapping=None, add_path=False):
         classes, class_to_idx = self._find_classes(root)
         if label_mapping is not None:

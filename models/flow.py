@@ -21,43 +21,15 @@ class ConditionalNICE(Flow):
     def __init__(self, features, hidden_sizes, num_layers, conditional_count):
         mask = torch.ones(features)
         layers = []
-        mask[::2] = -1
+        mask[::2] = 0
         for _ in range(num_layers):
             layers.append(AffineCouplingTransform(mask=mask, transform_net_create_fn=lambda x, y: FlowableMLP(torch.zeros(x + features).shape, torch.zeros(y).shape, hidden_sizes)))
-            mask *= -1
+            mask = 1 - mask
         
         super().__init__(
             transform=CompositeTransform(layers),
             distribution=ConditionalDiagonalNormal(shape=[features], context_encoder=nn.Linear(conditional_count, 2 * features))
         )
-
-
-class EmbeddingNICEModel(pl.LightningModule):
-    def __init__(self, base_model, flow, num_classes, zs_count, care_about_path=True):
-        self.base_model = base_model
-        self.flow = flow
-        self.num_classes = num_classes
-        self.zs_count = zs_count
-        self.care_about_path = care_about_path
-
-    def forward(self, x):
-        if self.care_about_path:
-            path, x = x
-        embeddings = self.base_model(x)
-        zs = self.flow.sample(self.zs_count - 1, context=embeddings)
-        return torch.cat((x.unsqueeze(0), zs), dim=0)
-        
-    def training_step(self, train_batch, batch_idx):
-        if self.care_about_path:
-            (path, x, swapped), context = train_batch
-        else:
-            (x, swapped), context = train_batch
-        context = self.base_model(x)
-        inputs = self.base_model(swapped)
-        loss = -self.flow.log_prob(inputs=inputs, context=context)
-        self.log('train_loss', loss.mean())
-        return loss
-
 
 
 class FlowModel(pl.LightningModule):
@@ -67,7 +39,7 @@ class FlowModel(pl.LightningModule):
             return z
         return z.mean(dim=1)
 
-    def __init__(self, base_model, embedding_model, classifier_model, class_count, flow, embedding_size=100, z_count=100, y_selector=_default_y_selector):
+    def __init__(self, base_model, embedding_model, classifier_model, class_count, flow, use_flow=True, embedding_size=100, z_count=100, y_selector=_default_y_selector):
         super().__init__()
         self.base_model = base_model
         self.embedding_model = embedding_model
@@ -78,6 +50,7 @@ class FlowModel(pl.LightningModule):
         self.class_count = class_count
         self.embedding_size = embedding_size
         self.flow = flow
+        self.use_flow = use_flow
     
     def get_context(self, embeddings):
         #class_context = torch.range(start=0, end=self.class_count, step=self.class_count / self.embedding_size) * self.class_count / self.embedding_size
@@ -85,9 +58,25 @@ class FlowModel(pl.LightningModule):
         #print(embeddings.shape)
         #print(class_context.shape)
         #context = torch.cat((embeddings, class_context), dim=1)
+        embeddings = embeddings.detach()
+        #embeddings.requires_grad = True
+        embeddings.requires_grad = False
         return embeddings
     
+    def forward_without_flow(self, x):
+        x = self.base_model(x)
+        x = self.embedding_model(x)
+        ys = self.classifier_model(x)
+        y = self.y_selector(ys)
+        return y
+
     def forward(self, x):
+        if self.use_flow:
+            return self.forward_flow(x)
+        else:
+            return self.forward_without_flow(x), 0
+    
+    def forward_flow(self, x):
         shape = x.shape
         if len(shape) == 5:
             x = x.flatten(0, 1)
@@ -104,21 +93,18 @@ class FlowModel(pl.LightningModule):
     def generate_zs(self, z0s, background_batch=None):
         context = self.get_context(z0s)
         if background_batch is not None:
-            log_prob = self.flow.log_prob(background_batch.flatten(0, 1), context=context.repeat([background_batch.shape[1], 1]))
+            log_prob = self.flow.log_prob(background_batch.flatten(0, 1).detach(), context=context.repeat([background_batch.shape[1], 1]))
             log_prob = log_prob.mean()
             return background_batch, log_prob
 
-        log_prob = torch.zeros(1)
+        log_prob = torch.zeros(1).to(self.device)
         zs = self.flow.sample(self.z_count - 1, context=context)
         return torch.cat((z0s.unsqueeze(1), zs), dim=1), log_prob
 
     def training_step(self, train_batch, batch_idx):
         (path, x), y = train_batch
-        #save_image(make_grid(x[0], nrow=8), "r1.jpg")
-        #save_image(make_grid(x.flatten(0, 1), nrow=8), "file.jpg")
         y_hat, log_prob = self(x)
-        loss = F.cross_entropy(y_hat, y) * 1 - log_prob * 0.001
-        #print(f'Losses: {log_prob}, { F.cross_entropy(y_hat, y)}, sum: {loss}')
+        loss = F.cross_entropy(y_hat, y) - log_prob
         self.log('train_loss', loss)
         self.log('train_acc', self.accuracy(y_hat, y), prog_bar=True)
         return loss
@@ -126,9 +112,13 @@ class FlowModel(pl.LightningModule):
     def validation_step(self, val_batch, batch_idx):
         (path, x), y = val_batch
         y_hat, log_prob = self(x)
-        loss = F.cross_entropy(y_hat, y) - log_prob * 0.01
+        loss = F.cross_entropy(y_hat, y) - log_prob
+        y_nf = self.forward_without_flow(x)
+        nonflow_loss = F.cross_entropy(y_nf, y)
         self.log('val_loss', loss)
+        self.log('val_loss_nf', nonflow_loss)
         self.log('val_acc', self.accuracy(y_hat, y), prog_bar=True)
+        self.log('val_acc_nf', self.accuracy(y_nf, y), prog_bar=True)
         return loss
 
     def training_epoch_end(self, outs):
