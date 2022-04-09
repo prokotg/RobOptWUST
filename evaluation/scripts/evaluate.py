@@ -13,25 +13,18 @@ from tqdm import tqdm
 
 import data.imagenet as ImageNet9
 
-parser = argparse.ArgumentParser(description='Evaluate any network on only_fg vs original!')
-parser.add_argument('-p', '--model-path', type=str, default='trained_model.pkl', required=True)
-parser.add_argument('-f', '--parent-dataset-path', type=str, default='data/', required=True)
-parser.add_argument('-l', '--log-filename', type=str, default='evaluate_log/evaluation.log')
-parser.add_argument('-w', '--workers', type=int, default=4)
-args = parser.parse_args()
+if __name__ == "__main__":
+	parser = argparse.ArgumentParser(description='Evaluate any network on only_fg vs original!')
+	parser.add_argument('-p', '--model-path', type=str, default='trained_model.pkl', required=True)
+	parser.add_argument('-f', '--parent-dataset-path', type=str, default='data/', required=True)
+	parser.add_argument('-l', '--log-filename', type=str, default='evaluate_log/evaluation.log')
+	parser.add_argument('-w', '--workers', type=int, default=4)
+	args = parser.parse_args()
 
-datasets = []
-for directory in os.listdir(args.parent_dataset_path):
-	if os.path.isdir(f'{args.parent_dataset_path}/{directory}'):
-		for subdir in os.listdir(f'{args.parent_dataset_path}/{directory}'):
-			if os.path.isdir(f'{args.parent_dataset_path}/{directory}/{subdir}') and subdir == 'val':
-				datasets.append(f'{args.parent_dataset_path}/{directory}')
-				break
-
-model_file = open(args.model_path, 'rb')
-model = pickle.load(model_file)
-model_file.close()
-model.cuda()
+	model_file = open(args.model_path, 'rb')
+	model = pickle.load(model_file)
+	model_file.close()
+	model.cuda()
 
 def log_to_file(filename, lines):
 	f = open(filename, 'a')
@@ -49,7 +42,7 @@ def out_to_lines(out):
 		lines.append(f"{line};\n")
 	return lines
 	
-def clear_files(filename):
+def clear_files(filename, datasets):
 	f = open(filename, 'w')
 	for v in ('class', 'nr', 'id'): 
 		f.write(f'{v};')
@@ -62,11 +55,11 @@ def clear_files(filename):
 	f.write('\n')
 	f.close()
 
-def eval_model(loaders, model, log_filename):
+def eval_model(loaders, model, log_filename, datasets):
 	model = model.eval()
 	iterator = tqdm(enumerate(zip(*loaders)), total=len(loaders[0]))
 	corrects = [0] * len(loaders)
-	clear_files(log_filename)
+	clear_files(log_filename, datasets)
 	outs = []
 	size_a = None
 	for chunk_index, data in iterator:
@@ -74,7 +67,7 @@ def eval_model(loaders, model, log_filename):
 		succs = []
 		paths = []
 		for i, ((c_paths, inp), target) in enumerate(data):
-			output = model(inp.cuda())
+			output, _ = model(inp.cuda())
 			outputs.append(output)
 			_, pred = output.topk(1, 1, True, True)
 			pred = pred.cpu().detach()[:, 0]
@@ -97,10 +90,21 @@ def eval_model(loaders, model, log_filename):
 	
 	log_to_file(log_filename, out_to_lines(outs))
 
-val_loaders = []
-for dataset_path in datasets:
-	dataset = ImageNet9.ImageNet9(dataset_path)
-	_, val_loader = dataset.make_loaders(batch_size=4, workers=args.workers, add_path=True)
-	val_loaders.append(val_loader)
+def create_loaders(datasets_path, workers=4):
+	datasets = []
+	for directory in os.listdir(datasets_path):
+		if os.path.isdir(f'{datasets_path}/{directory}'):
+			for subdir in os.listdir(f'{datasets_path}/{directory}'):
+				if os.path.isdir(f'{datasets_path}/{directory}/{subdir}') and subdir == 'val':
+					datasets.append(f'{datasets_path}/{directory}')
+					break
+	val_loaders = []
+	for dataset_path in datasets:
+		dataset = ImageNet9.ImageNet9(dataset_path)
+		_, val_loader = dataset.make_loaders(batch_size=4, workers=workers, add_path=True)
+		val_loaders.append(val_loader)
+	return val_loaders, datasets
 
-eval_model(val_loaders, model, args.log_filename)
+if __name__ == "__main__":
+	val_loaders, datasets = create_loaders(args.parent_dataset_path, workers=args.workers)
+	eval_model(val_loaders, model, args.log_filename, datasets)
