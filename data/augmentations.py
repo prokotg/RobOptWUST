@@ -21,7 +21,7 @@ class RandomBackgroundPerClass(object):
         augmentation_chance = torch.rand(1)
         mask = np.zeros_like(image)
         background_class = -1
-        if augmentation_chance < 100 * self.augment_chances[target]:
+        if augmentation_chance < self.augment_chances[target]:
             image = backgroundless.copy()
             background_id = torch.randint(0, len(self.backgrounds_paths), (1,))
             #  example background path '...\only_bg_t\\only_bg_t\\/train/00_dog/n02085936_2693.JPEG'

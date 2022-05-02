@@ -3,7 +3,7 @@ import torch
 import torch.utils.data as data
 from torch.utils.data import Dataset
 from torchvision import transforms
-from data.shared import set_background, default_loader
+from data.shared import set_background, default_loader, divide_paths
 import torchvision.transforms.functional as TF
 
 import os
@@ -233,14 +233,16 @@ class MultiImageFolder(DatasetMultifolder):
 
 class SwapBackgroundFolder(data.Dataset):
     def __init__(self, root, backgrounds, foregrounds, loader=default_loader, changed_backgrounds_count=8, pre_transform=None,
-                 post_transform=None, target_transform=None, label_mapping=None, add_path=False):
+                 assigned_backgrounds_per_instance=None, random_seed=None, post_transform=None, target_transform=None, label_mapping=None, add_path=False):
         classes, class_to_idx = self._find_classes(root)
         if label_mapping is not None:
             classes, class_to_idx = label_mapping(classes, class_to_idx)
 
         samples = make_dataset(root, class_to_idx, IMG_EXTENSIONS)
-        backgrounds = make_dataset(backgrounds, class_to_idx, IMG_EXTENSIONS)
         foregrounds = make_dataset(foregrounds, class_to_idx, IMG_EXTENSIONS)
+        backgrounds = make_dataset(backgrounds, class_to_idx, IMG_EXTENSIONS)
+        if assigned_backgrounds_per_instance is not None:
+            backgrounds = divide_paths(foregrounds, backgrounds, assigned_backgrounds_per_instance, random_seed)
         
         if len(samples) == 0:
             raise(RuntimeError("Found 0 files in subfolders of: " + root + "\n"
@@ -257,6 +259,7 @@ class SwapBackgroundFolder(data.Dataset):
         self.foregrounds = foregrounds
         self.targets = [s[1] for s in samples]
         self.changed_backgrounds_count = changed_backgrounds_count
+        self.assigned_backgrounds_per_instance = assigned_backgrounds_per_instance
         self.pre_transform = pre_transform
         self.post_transform = post_transform
         self.target_transform = target_transform
@@ -284,7 +287,11 @@ class SwapBackgroundFolder(data.Dataset):
             target = self.target_transform(target)
            
         for i in range(self.changed_backgrounds_count):
-            background = self.loader(self.backgrounds[int(len(self.backgrounds) * random.random())][0])
+            background_set = self.backgrounds
+            if self.assigned_backgrounds_per_instance is not None:
+                background_set = self.backgrounds[index]
+            selected_background = background_set[int(len(background_set) * random.random())]
+            background = self.loader(selected_background[0])
             background = TF.pil_to_tensor(background)
             changed_backgrounds.append(set_background(foreground, background)[0])
         changed_backgrounds = torch.stack(changed_backgrounds)

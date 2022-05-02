@@ -4,10 +4,12 @@ from torchvision import transforms
 from . import folder
 from . import augmentations
 from torch.utils.data import DataLoader
+from . import shared
 
 
 def make_loader(workers, batch_size, transforms, data_path, name, shuffle_val=False,
-                add_path=False, use_background_replacement=False, additional_paths=None, use_swap_background_minibatch_loader=False):
+                add_path=False, use_background_replacement=False, additional_paths=None, use_swap_background_minibatch_loader=False,
+                assigned_backgrounds_per_instance=None, random_seed=None):
     path = os.path.join(data_path, name)
     if not os.path.exists(path):
         raise ValueError("{1} data must be stored in {0}".format(path, name))
@@ -20,7 +22,8 @@ def make_loader(workers, batch_size, transforms, data_path, name, shuffle_val=Fa
         if use_background_replacement:
             set_folder = folder.BackgroundReplacementDataset(roots=[path] + additional_paths, transform=transforms, add_path=add_path)
         elif use_swap_background_minibatch_loader:
-            set_folder = folder.SwapBackgroundFolder(root=path, backgrounds=additional_paths[0], foregrounds=additional_paths[1], pre_transform=transforms[0], post_transform=transforms[1], add_path=add_path)
+            set_folder = folder.SwapBackgroundFolder(root=path, backgrounds=additional_paths[0], foregrounds=additional_paths[1], pre_transform=transforms[0], post_transform=transforms[1], 
+                add_path=add_path, assigned_backgrounds_per_instance=assigned_backgrounds_per_instance, random_seed=random_seed)
         else:
             set_folder = folder.MultiImageFolder(root=[path] + additional_paths, transform=transforms, add_path=add_path)
         # if decouple, make background image dataset
@@ -31,13 +34,15 @@ def make_loader(workers, batch_size, transforms, data_path, name, shuffle_val=Fa
 
 
 def generate_loaders(workers, batch_size, transform_train, transform_test, data_path, dataset,
-                     shuffle_val=False, add_path=False, use_background_replacement=False, additional_paths=None, use_swap_background_minibatch_loader=False):
+                     shuffle_val=False, add_path=False, use_background_replacement=False, additional_paths=None, use_swap_background_minibatch_loader=False,
+                     assigned_backgrounds_per_instance=None, random_seed=None):
     '''
     '''
     print(f"==> Preparing dataset {dataset}..")
 
     train_loader = make_loader(workers, batch_size, transform_train, data_path, 'train', True, add_path=add_path,
-                               additional_paths=additional_paths, use_background_replacement=use_background_replacement, use_swap_background_minibatch_loader=use_swap_background_minibatch_loader)
+                               additional_paths=additional_paths, use_background_replacement=use_background_replacement, use_swap_background_minibatch_loader=use_swap_background_minibatch_loader,
+                               assigned_backgrounds_per_instance=assigned_backgrounds_per_instance, random_seed=random_seed)
     test_loader = make_loader(workers, batch_size, transform_test, data_path, 'val', shuffle_val, add_path=add_path)
     return train_loader, test_loader
 
@@ -56,7 +61,8 @@ class DataSet(object):
         self.data_path = data_path
         self.__dict__.update(kwargs)
 
-    def make_loaders(self, workers, batch_size, shuffle_val=False, add_path=False, use_background_replacement=False, use_swap_background_minibatch_loader=False, additional_paths=None):
+    def make_loaders(self, workers, batch_size, shuffle_val=False, add_path=False, use_background_replacement=False,
+                     use_swap_background_minibatch_loader=False, additional_paths=None, assigned_backgrounds_per_instance=None, random_seed=None):
         '''
         '''
         return generate_loaders(workers=workers,
@@ -69,7 +75,9 @@ class DataSet(object):
                                 add_path=add_path,
                                 use_background_replacement=use_background_replacement,
                                 use_swap_background_minibatch_loader=use_swap_background_minibatch_loader,
-                                additional_paths=additional_paths)
+                                additional_paths=additional_paths,
+                                assigned_backgrounds_per_instance=assigned_backgrounds_per_instance,
+                                random_seed=random_seed)
 
     def get_model(self, arch, pretrained):
         '''
@@ -130,7 +138,8 @@ class ImageNet(DataSet):
 
 
 class DataSetBackgroundAugmented(DataSet):
-    def make_loaders(self, workers, batch_size, shuffle_val=False, add_path=False, use_background_replacement=False, use_swap_background_minibatch_loader=False, additional_path=None):
+    def make_loaders(self, workers, batch_size, shuffle_val=False, add_path=False, use_background_replacement=False, use_swap_background_minibatch_loader=False,
+                     additional_path=None, assigned_backgrounds_per_instance=None, random_seed=None):
         if additional_path is None:
             additional_path = self.foregrounds_path
         return generate_loaders(workers=workers,
@@ -143,10 +152,12 @@ class DataSetBackgroundAugmented(DataSet):
                                 add_path=add_path,
                                 use_background_replacement=use_background_replacement,
                                 use_swap_background_minibatch_loader=use_swap_background_minibatch_loader,
-                                additional_paths=[additional_path])
+                                additional_paths=[additional_path],
+                                assigned_backgrounds_per_instance=assigned_backgrounds_per_instance,
+                                random_seed=random_seed)
 
 
-def generate_paths(self, data_path):
+def generate_paths(data_path):
     result = []
     for data_path in [f'{data_path}/train']:
         for inner_dir in sorted(os.listdir(data_path)):
@@ -185,13 +196,14 @@ class ImageNetBackgroundChangeStacked(DataSetBackgroundAugmented):
     '''
     '''
 
-    def __init__(self, data_path, backgrounds_path, foregrounds_path, background_transform_chance, **kwargs):
+    def __init__(self, data_path, backgrounds_path, foregrounds_path, background_transform_chance, backgrounds_per_example=None, random_seed=None, **kwargs):
         """
         """
         self.foregrounds_path = foregrounds_path
         backgrounds = generate_paths(backgrounds_path)
+        if backgrounds_per_example is not None:
+            backgrounds = shared.divide_paths(backgrounds, backgrounds, paths_per_instance=backgrounds_per_example, random_seed=random_seed)
         self.augmentation = augmentations.RandomBackgroundPerClass([background_transform_chance] * 9, backgrounds)
-
         common_tr = [augmentations.UnwrapTupled(), transforms.Resize((224, 224)), transforms.ToTensor()]
         train_tr = [self.augmentation, transforms.RandomResizedCrop(224), transforms.RandomHorizontalFlip(),
                     transforms.ColorJitter(0.4, 0.4, 0.4)]

@@ -1,7 +1,10 @@
 from cv2 import cv2
+from tqdm import tqdm
 import numpy as np
 import torchvision.transforms.functional as TF
 from PIL import Image
+from numpy.random import default_rng
+
 
 def calculate_mask(img):
     # convert img to grey
@@ -55,3 +58,10 @@ def default_loader(path):
         return accimage_loader(path)
     else:
         return pil_loader(path)
+
+
+def divide_paths(instances, paths, paths_per_instance=10, random_seed=None):
+    result = []
+    rng = default_rng(random_seed)
+    result = rng.choice(paths, size=(len(instances), paths_per_instance))
+    return result

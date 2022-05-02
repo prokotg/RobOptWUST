@@ -1,35 +1,8 @@
 import torch
-from torch import nn
+import torch.nn as nn
 from torch.nn import functional as F
 import pytorch_lightning as pl
 import torchmetrics
-from torchvision.utils import save_image, make_grid
-from nflows.transforms.coupling import AffineCouplingTransform
-from nflows import transforms, distributions, flows
-from nflows.flows.base import Flow
-from nflows.nn.nets import MLP
-from nflows.transforms.base import CompositeTransform
-from nflows.distributions.normal import ConditionalDiagonalNormal
-
-
-class FlowableMLP(MLP):
-    def forward(self, input, context):
-        return super().forward(torch.cat((input, context), dim=1))
-
-
-class ConditionalNICE(Flow):
-    def __init__(self, features, hidden_sizes, num_layers, conditional_count):
-        mask = torch.ones(features)
-        layers = []
-        mask[::2] = 0
-        for _ in range(num_layers):
-            layers.append(AffineCouplingTransform(mask=mask, transform_net_create_fn=lambda x, y: FlowableMLP(torch.zeros(x + features).shape, torch.zeros(y).shape, hidden_sizes)))
-            mask = 1 - mask
-        
-        super().__init__(
-            transform=CompositeTransform(layers),
-            distribution=ConditionalDiagonalNormal(shape=[features], context_encoder=nn.Linear(conditional_count, 2 * features))
-        )
 
 
 class FlowModel(pl.LightningModule):
@@ -39,7 +12,7 @@ class FlowModel(pl.LightningModule):
             return z
         return z.mean(dim=1)
 
-    def __init__(self, base_model, embedding_model, classifier_model, class_count, flow, use_flow=True, embedding_size=100, z_count=100, y_selector=_default_y_selector):
+    def __init__(self, base_model, embedding_model, classifier_model, class_count, flow, use_flow=True, use_class_context=True, embedding_size=100, z_count=100, y_selector=_default_y_selector):
         super().__init__()
         self.base_model = base_model
         self.embedding_model = embedding_model
@@ -49,17 +22,12 @@ class FlowModel(pl.LightningModule):
         self.y_selector = y_selector
         self.class_count = class_count
         self.embedding_size = embedding_size
+        self.use_class_context = use_class_context
         self.flow = flow
         self.use_flow = use_flow
     
     def get_context(self, embeddings):
-        #class_context = torch.range(start=0, end=self.class_count, step=self.class_count / self.embedding_size) * self.class_count / self.embedding_size
-        #class_context = nn.functional.one_hot(class_context.long()).type_as(embeddings).repeat((embeddings.shape[0], 1))
-        #print(embeddings.shape)
-        #print(class_context.shape)
-        #context = torch.cat((embeddings, class_context), dim=1)
         embeddings = embeddings.detach()
-        #embeddings.requires_grad = True
         embeddings.requires_grad = False
         return embeddings
     
@@ -75,7 +43,7 @@ class FlowModel(pl.LightningModule):
             return self.forward_flow(x)
         else:
             return self.forward_without_flow(x), 0
-    
+
     def forward_flow(self, x):
         shape = x.shape
         if len(shape) == 5:
@@ -104,7 +72,11 @@ class FlowModel(pl.LightningModule):
     def training_step(self, train_batch, batch_idx):
         (path, x), y = train_batch
         y_hat, log_prob = self(x)
-        loss = F.cross_entropy(y_hat, y) - log_prob
+        cross_entropy_loss = F.cross_entropy(y_hat, y)
+        nll_loss = log_prob
+        loss = F.cross_entropy(y_hat, y) - nll_loss
+        self.log('train_cross_entropy_loss', cross_entropy_loss)
+        self.log('train_nll_loss', nll_loss)
         self.log('train_loss', loss)
         self.log('train_acc', self.accuracy(y_hat, y), prog_bar=True)
         return loss
@@ -112,7 +84,7 @@ class FlowModel(pl.LightningModule):
     def validation_step(self, val_batch, batch_idx):
         (path, x), y = val_batch
         y_hat, log_prob = self(x)
-        loss = F.cross_entropy(y_hat, y) - log_prob
+        loss = F.cross_entropy(y_hat, y)
         y_nf = self.forward_without_flow(x)
         nonflow_loss = F.cross_entropy(y_nf, y)
         self.log('val_loss', loss)
