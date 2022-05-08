@@ -23,6 +23,7 @@ nflows==0.14
 numpy==1.21.1
 oauthlib==3.1.0
 opt-einsum==3.3.0
+opencv-python==4.5.5.64
 packaging==21.0
 Pillow==8.3.1
 protobuf==3.17.3

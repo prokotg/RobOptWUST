@@ -263,6 +263,7 @@ class SwapBackgroundFolder(data.Dataset):
         self.pre_transform = pre_transform
         self.post_transform = post_transform
         self.target_transform = target_transform
+        self.state = True
 
     def _find_classes(self, dir):
         if sys.version_info >= (3, 5):
@@ -285,22 +286,29 @@ class SwapBackgroundFolder(data.Dataset):
         
         if self.target_transform is not None:
             target = self.target_transform(target)
-           
-        for i in range(self.changed_backgrounds_count):
-            background_set = self.backgrounds
-            if self.assigned_backgrounds_per_instance is not None:
-                background_set = self.backgrounds[index]
-            selected_background = background_set[int(len(background_set) * random.random())]
-            background = self.loader(selected_background[0])
-            background = TF.pil_to_tensor(background)
-            changed_backgrounds.append(set_background(foreground, background)[0])
-        changed_backgrounds = torch.stack(changed_backgrounds)
-        minibatch = torch.cat((sample.unsqueeze(0), changed_backgrounds), dim=0)
+        
+        if self.state:
+            for i in range(self.changed_backgrounds_count):
+                background_set = self.backgrounds
+                if self.assigned_backgrounds_per_instance is not None:
+                    background_set = self.backgrounds[index]
+                selected_background = background_set[int(len(background_set) * random.random())]
+                background = self.loader(selected_background[0])
+                background = TF.pil_to_tensor(background)
+                changed_backgrounds.append(set_background(foreground, background)[0])
+            changed_backgrounds = torch.stack(changed_backgrounds)
+            minibatch = torch.cat((sample.unsqueeze(0), changed_backgrounds), dim=0)
+        else:
+            minibatch = sample
+        
         if self.add_path:
             return (path, minibatch), target
         else:
             return minibatch, target
 
+    def change_state(self, state):
+        self.state = state
+    
     def __len__(self):
         return len(self.samples)
 

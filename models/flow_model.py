@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from pytorch_lightning.callbacks import Callback
 from torch.nn import functional as F
 import pytorch_lightning as pl
 import torchmetrics
@@ -73,10 +74,13 @@ class FlowModel(pl.LightningModule):
         (path, x), y = train_batch
         y_hat, log_prob = self(x)
         cross_entropy_loss = F.cross_entropy(y_hat, y)
-        nll_loss = log_prob
-        loss = F.cross_entropy(y_hat, y) - nll_loss
+        if self.use_flow:
+            nll_loss = log_prob
+            loss = F.cross_entropy(y_hat, y) - nll_loss
+            self.log('train_nll_loss', nll_loss)
+        else:
+            loss = F.cross_entropy(y_hat, y)
         self.log('train_cross_entropy_loss', cross_entropy_loss)
-        self.log('train_nll_loss', nll_loss)
         self.log('train_loss', loss)
         self.log('train_acc', self.accuracy(y_hat, y), prog_bar=True)
         return loss
@@ -99,3 +103,34 @@ class FlowModel(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=0.0001)
         return optimizer
+    
+    def change_flow_state(self, state: bool):
+        self.use_flow = state
+    
+    def change_embedding_grad(self, state: bool):
+        for p in self.embedding_model.parameters():
+            p.requires_grad = state
+    
+    def change_classifier_state(self, state: bool):
+        for p in self.classifier_model.parameters():
+            p.requires_grad = state
+
+
+class FreezeNetworkCallback(Callback):
+    def __init__(self, model, loader, states):
+        self.states = states
+        self.model = model
+        self.loader = loader
+        self.epoch = 0
+
+    def on_validation_epoch_end(self, trainer, module):
+        self.epoch += 1
+        for epoch, embedding_state, classifier_state, flow_state in self.states:
+            if self.epoch == epoch:
+                if self.model is not None:
+                    self.model.change_embedding_grad(embedding_state)
+                    self.model.change_classifier_state(classifier_state)
+                    self.model.change_flow_state(flow_state)
+                if self.loader is not None:
+                    self.loader.dataset.change_state(flow_state)
+

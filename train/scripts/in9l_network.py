@@ -6,8 +6,10 @@ from torch.utils.data import DataLoader
 from torchvision import transforms, models
 from pytorch_lightning import loggers as pl_loggers
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
+from pytorch_lightning.callbacks import Callback
 from models.timm import TIMMModel
-from models.flow import FlowModel, ConditionalNICE
+from models.flow_model import FlowModel, FreezeNetworkCallback
+from models.flows import ConditionalNICE, ConditionalMAF
 from torch import nn
 from data.augmentations import UpdateChancesBasedOnAccuracyCallback
 import data.imagenet as ImageNet9
@@ -24,6 +26,7 @@ if __name__ == "__main__":
     parser.add_argument('-e', '--epochs', type=int, default=200)
     parser.add_argument('-t', '--use-background-transform', type=bool, default=False)
     parser.add_argument('-b', '--use-background-blur', type=bool, default=False)
+    parser.add_argument('--batch-size', type=int, default=32)
     parser.add_argument('--use-auto-background-transform', type=bool, default=False)
     parser.add_argument('--use-swap-background-minibatch-loader', type=bool, default=False)
     parser.add_argument('--use-flow-model', type=bool, default=False)
@@ -47,7 +50,7 @@ if __name__ == "__main__":
     else:
         imagenet_dataset = ImageNet9.ImageNet9(args.dataset_path, divide_transforms=args.use_swap_background_minibatch_loader)
     
-    train_loader, val_loader = imagenet_dataset.make_loaders(batch_size=8, workers=args.workers, add_path=True, use_swap_background_minibatch_loader=args.use_swap_background_minibatch_loader, additional_paths=[args.backgrounds_path, args.foregrounds_path] if args.use_swap_background_minibatch_loader else None)
+    train_loader, val_loader = imagenet_dataset.make_loaders(batch_size=32, workers=args.workers, add_path=True, use_swap_background_minibatch_loader=args.use_swap_background_minibatch_loader, additional_paths=[args.backgrounds_path, args.foregrounds_path] if args.use_swap_background_minibatch_loader else None, assigned_backgrounds_per_instance=16, random_seed=42)
 
     if not args.use_flow_model:
         model = TIMMModel(timm.create_model(args.network, pretrained=False, num_classes=9))
@@ -58,7 +61,9 @@ if __name__ == "__main__":
         if args.use_loaded_model:
             model_file = open(args.base_model_path, 'rb')
             base_model = pkl.load(model_file)
-            last_layer_size = len(base_model[-1].bias)
+            print(base_model.__dict__)
+            last_layer_size = base_model.model.fc.weight.shape[0]
+            base_model.fc = nn.Identity()
             model_file.close()
         else:
             base_model = models.resnet50(pretrained=True)
@@ -67,24 +72,43 @@ if __name__ == "__main__":
         
         for p in base_model.parameters():
             p.requires_grad = False
-        embedding_size = 256
+        embedding_size = 128
         
         model = FlowModel(base_model,
-        nn.Sequential(
-            nn.Linear(last_layer_size, 512),
-            nn.ReLU(),
-            nn.Linear(512, embedding_size),
-            nn.Sigmoid(),
-        ), nn.Sequential(
-            nn.Linear(embedding_size, 128),
-            nn.Sigmoid(),
-            nn.Linear(128, 9),
-            nn.Sigmoid()
-        ), 9, flow=ConditionalNICE(embedding_size, hidden_sizes=[256, 256, 256], num_layers=4, conditional_count=embedding_size), embedding_size=embedding_size, z_count=32)
+            nn.Sequential(
+                nn.Linear(last_layer_size, 512),
+                nn.ReLU(),
+                nn.Linear(512, embedding_size),
+                nn.Sigmoid(),
+            ), nn.Sequential(
+                nn.Linear(embedding_size, 128),
+                nn.Sigmoid(),
+                nn.Linear(128, 9),
+                nn.Sigmoid()
+            ), 9, #flow=ConditionalNICE(embedding_size, hidden_sizes=[256, 256, 256], num_layers=4, conditional_count=embedding_size)
+            flow=ConditionalMAF(embedding_size, hidden_features=128, num_layers=4, conditional_count=embedding_size, num_blocks_per_layer=4), 
+            embedding_size=embedding_size, z_count=16)
 
     callbacks = []
+
+    class AutopickleModel(Callback):
+        def __init__(self, model):
+            self.model = model
+
+        def on_validation_epoch_end(self, trainer, module):
+            model_file = open(args.save_path, 'wb')
+            # The base model should not need it anymore- and it's a bit messing up pickling
+            self.model.base_model.train_dataloader = None
+            self.model.base_model.val_dataloader = None
+            self.model.base_model.trainer = None
+            pkl.dump(self.model, model_file)
+            model_file.close()
+
+    callbacks.append(AutopickleModel(model))
     if args.use_auto_background_transform:
         callbacks.append(UpdateChancesBasedOnAccuracyCallback(model, imagenet_dataset.augmentation, args.augmentation_checking_dataset_size, args.gpus > 0))
+    
+    callbacks.append(FreezeNetworkCallback(model, train_loader, [(1, True, True, False), (10, False, True, True)]))
     # training
     trainer = pl.Trainer(max_epochs=args.epochs, logger=tensorboard_logger, gpus=args.gpus, callbacks=callbacks)
     trainer.fit(model, train_loader, val_loader)
