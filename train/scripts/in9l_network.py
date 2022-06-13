@@ -31,6 +31,8 @@ if __name__ == "__main__":
     parser.add_argument('--use-swap-background-minibatch-loader', type=bool, default=False)
     parser.add_argument('--use-flow-model', type=bool, default=False)
     parser.add_argument('--use-loaded-model', type=bool, default=False)
+    parser.add_argument('--select-gpu', type=int, default=None)
+    parser.add_argument('--limit-backgrounds-per-instance', type=int, default=None)
     parser.add_argument('--background-transform-chance', type=float, default=0.0)
     parser.add_argument('--augmentation-checking-dataset-size', type=float, default=0.2)
     parser.add_argument('--backgrounds-path', type=str, default='data/only_bg_t/train')
@@ -50,7 +52,7 @@ if __name__ == "__main__":
     else:
         imagenet_dataset = ImageNet9.ImageNet9(args.dataset_path, divide_transforms=args.use_swap_background_minibatch_loader)
     
-    train_loader, val_loader = imagenet_dataset.make_loaders(batch_size=32, workers=args.workers, add_path=True, use_swap_background_minibatch_loader=args.use_swap_background_minibatch_loader, additional_paths=[args.backgrounds_path, args.foregrounds_path] if args.use_swap_background_minibatch_loader else None, assigned_backgrounds_per_instance=16, random_seed=42)
+    train_loader, val_loader = imagenet_dataset.make_loaders(batch_size=32, workers=args.workers, add_path=True, use_swap_background_minibatch_loader=args.use_swap_background_minibatch_loader, additional_paths=[args.backgrounds_path, args.foregrounds_path] if args.use_swap_background_minibatch_loader else None, assigned_backgrounds_per_instance=args.limit_backgrounds_per_instance, random_seed=42)
 
     if not args.use_flow_model:
         model = TIMMModel(timm.create_model(args.network, pretrained=False, num_classes=9))
@@ -62,8 +64,8 @@ if __name__ == "__main__":
             model_file = open(args.base_model_path, 'rb')
             base_model = pkl.load(model_file)
             print(base_model.__dict__)
-            last_layer_size = base_model.model.fc.weight.shape[0]
-            base_model.fc = nn.Identity()
+            last_layer_size = base_model.model.fc.weight.shape[1]
+            base_model.model.fc = nn.Identity()
             model_file.close()
         else:
             base_model = models.resnet50(pretrained=True)
@@ -74,6 +76,9 @@ if __name__ == "__main__":
             p.requires_grad = False
         embedding_size = 128
         
+        #flow = ConditionalMAF(embedding_size, hidden_features=256, num_layers=4, conditional_count=embedding_size, num_blocks_per_layer=4)
+        flow = ConditionalNICE(embedding_size, hidden_sizes=[256, 256, 256], num_layers=4, conditional_count=embedding_size)
+        #flow._epsilon = 1
         model = FlowModel(base_model,
             nn.Sequential(
                 nn.Linear(last_layer_size, 512),
@@ -85,8 +90,8 @@ if __name__ == "__main__":
                 nn.Sigmoid(),
                 nn.Linear(128, 9),
                 nn.Sigmoid()
-            ), 9, #flow=ConditionalNICE(embedding_size, hidden_sizes=[256, 256, 256], num_layers=4, conditional_count=embedding_size)
-            flow=ConditionalMAF(embedding_size, hidden_features=128, num_layers=4, conditional_count=embedding_size, num_blocks_per_layer=4), 
+            ), 9, #
+            flow=flow, 
             embedding_size=embedding_size, z_count=16)
 
     callbacks = []
@@ -108,9 +113,9 @@ if __name__ == "__main__":
     if args.use_auto_background_transform:
         callbacks.append(UpdateChancesBasedOnAccuracyCallback(model, imagenet_dataset.augmentation, args.augmentation_checking_dataset_size, args.gpus > 0))
     
-    callbacks.append(FreezeNetworkCallback(model, train_loader, [(1, True, True, False), (10, False, True, True)]))
+    callbacks.append(FreezeNetworkCallback(model, train_loader, [(1, True, True, False), (3, False, True, True)]))
     # training
-    trainer = pl.Trainer(max_epochs=args.epochs, logger=tensorboard_logger, gpus=args.gpus, callbacks=callbacks)
+    trainer = pl.Trainer(max_epochs=args.epochs, logger=tensorboard_logger, gpus=args.gpus if args.select_gpu is None else [args.select_gpu], callbacks=callbacks)
     trainer.fit(model, train_loader, val_loader)
 
     print(args.save_path)

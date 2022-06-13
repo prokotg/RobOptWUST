@@ -40,7 +40,7 @@ class FlowModel(pl.LightningModule):
         return y
 
     def forward(self, x):
-        if self.use_flow:
+        if not hasattr(self, 'use_flow') or self.use_flow:
             return self.forward_flow(x)
         else:
             return self.forward_without_flow(x), 0
@@ -125,12 +125,12 @@ class FreezeNetworkCallback(Callback):
 
     def on_validation_epoch_end(self, trainer, module):
         self.epoch += 1
-        for epoch, embedding_state, classifier_state, flow_state in self.states:
+        for epoch, embedding_statee, classifier_state, flow_state, loader_state in self.states:
             if self.epoch == epoch:
                 if self.model is not None:
                     self.model.change_embedding_grad(embedding_state)
                     self.model.change_classifier_state(classifier_state)
                     self.model.change_flow_state(flow_state)
                 if self.loader is not None:
-                    self.loader.dataset.change_state(flow_state)
+                    self.loader.dataset.change_state(loader_state)
 

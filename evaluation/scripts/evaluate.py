@@ -55,6 +55,24 @@ def clear_files(filename, datasets):
 	f.write('\n')
 	f.close()
 
+def eval_model_averages(loaders, model):
+	model = model.eval()
+	iterator = tqdm(enumerate(zip(*loaders)), total=len(loaders[0]))
+	corrects = [0] * len(loaders)
+	for chunk_index, data in iterator:
+		outputs = []
+		for i, ((c_paths, inp), target) in enumerate(data):
+			output = model(inp.cuda())
+			if type(output) is tuple:
+				output = output[0]
+			_, pred = output.topk(1, 1, True, True)
+			pred = pred.cpu().detach()[:, 0]
+			for index, (tr, p) in enumerate(zip(target, pred)):
+				if (p == tr).item():
+					corrects[i] += 1
+	
+	return [c/len(loaders[0].dataset)*100 for c in corrects]
+
 def eval_model(loaders, model, log_filename, datasets):
 	model = model.eval()
 	iterator = tqdm(enumerate(zip(*loaders)), total=len(loaders[0]))

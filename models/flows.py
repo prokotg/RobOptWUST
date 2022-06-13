@@ -63,3 +63,36 @@ class ConditionalMAF(Flow):
             transform=CompositeTransform(layers),
             distribution=ConditionalDiagonalNormal(shape=[features], context_encoder=nn.Linear(conditional_count, 2 * features))
         )
+
+class MAF(Flow):
+    def __init__(self, features, hidden_features, num_layers, num_blocks_per_layer, conditional_count,
+                 use_residual_blocks=True, use_random_masks=False, use_random_permutations=False, activation=F.relu,
+                 dropout_probability=0.0, batch_norm_within_layers=False, batch_norm_between_layers=False):
+        if use_random_permutations:
+            permutation_constructor = RandomPermutation
+        else:
+            permutation_constructor = ReversePermutation
+
+        layers = []
+        for _ in range(num_layers):
+            layers.append(permutation_constructor(features))
+            layers.append(
+                MaskedAffineAutoregressiveTransform(
+                    features=features,
+                    context_features=conditional_count,
+                    hidden_features=hidden_features,
+                    num_blocks=num_blocks_per_layer,
+                    use_residual_blocks=use_residual_blocks,
+                    random_mask=use_random_masks,
+                    activation=activation,
+                    dropout_probability=dropout_probability,
+                    use_batch_norm=batch_norm_within_layers,
+                )
+            )
+            if batch_norm_between_layers:
+                layers.append(BatchNorm(features))
+
+        super().__init__(
+            transform=CompositeTransform(layers),
+            distribution=ConditionalDiagonalNormal(shape=[features], context_encoder=nn.Linear(conditional_count, 2 * features))
+        )
