@@ -139,9 +139,9 @@ class ImageNet(DataSet):
 
 class DataSetBackgroundAugmented(DataSet):
     def make_loaders(self, workers, batch_size, shuffle_val=False, add_path=False, use_background_replacement=False, use_swap_background_minibatch_loader=False,
-                     additional_path=None, assigned_backgrounds_per_instance=None, random_seed=None):
-        if additional_path is None:
-            additional_path = self.foregrounds_path
+                     additional_paths=None, assigned_backgrounds_per_instance=None, random_seed=None):
+        if additional_paths is None:
+            additional_paths = [self.foregrounds_path]
         return generate_loaders(workers=workers,
                                 batch_size=batch_size,
                                 transform_train=self.transform_train,
@@ -152,7 +152,7 @@ class DataSetBackgroundAugmented(DataSet):
                                 add_path=add_path,
                                 use_background_replacement=use_background_replacement,
                                 use_swap_background_minibatch_loader=use_swap_background_minibatch_loader,
-                                additional_paths=[additional_path],
+                                additional_paths=additional_paths,
                                 assigned_backgrounds_per_instance=assigned_backgrounds_per_instance,
                                 random_seed=random_seed)
 

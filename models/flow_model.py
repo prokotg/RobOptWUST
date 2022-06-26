@@ -11,7 +11,7 @@ class FlowModel(pl.LightningModule):
     def _default_y_selector(z):
         if len(z.shape) == 2:
             return z
-        return z.mean(dim=1)
+        return z.mode(dim=1)[0] #z.mean(dim=1)
 
     def __init__(self, base_model, embedding_model, classifier_model, class_count, flow, use_flow=True, use_class_context=True, embedding_size=100, z_count=100, y_selector=_default_y_selector):
         super().__init__()
@@ -65,8 +65,8 @@ class FlowModel(pl.LightningModule):
             log_prob = self.flow.log_prob(background_batch.flatten(0, 1).detach(), context=context.repeat([background_batch.shape[1], 1]))
             log_prob = log_prob.mean()
             return background_batch, log_prob
-
-        log_prob = torch.zeros(1).to(self.device)
+        else:
+            log_prob = torch.zeros(1).to(self.device)
         zs = self.flow.sample(self.z_count - 1, context=context)
         return torch.cat((z0s.unsqueeze(1), zs), dim=1), log_prob
 
@@ -76,7 +76,7 @@ class FlowModel(pl.LightningModule):
         cross_entropy_loss = F.cross_entropy(y_hat, y)
         if self.use_flow:
             nll_loss = log_prob
-            loss = F.cross_entropy(y_hat, y) - nll_loss
+            loss = F.cross_entropy(y_hat, y) - nll_loss * 0.00005
             self.log('train_nll_loss', nll_loss)
         else:
             loss = F.cross_entropy(y_hat, y)
@@ -125,7 +125,7 @@ class FreezeNetworkCallback(Callback):
 
     def on_validation_epoch_end(self, trainer, module):
         self.epoch += 1
-        for epoch, embedding_statee, classifier_state, flow_state, loader_state in self.states:
+        for epoch, embedding_state, classifier_state, flow_state, loader_state in self.states:
             if self.epoch == epoch:
                 if self.model is not None:
                     self.model.change_embedding_grad(embedding_state)

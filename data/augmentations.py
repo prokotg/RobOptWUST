@@ -27,7 +27,7 @@ class RandomBackgroundPerClass(object):
             #  example background path '...\only_bg_t\\only_bg_t\\/train/00_dog/n02085936_2693.JPEG'
             background_class = int(os.path.split(os.path.dirname(self.backgrounds_paths[background_id]))[-1].split('_')[0])
             background = TF.pil_to_tensor(shared.default_loader(self.backgrounds_paths[background_id]))
-            image, _ = set_background(image, background)
+            image, _ = shared.set_background(image, background)
         else:
             image = TF.resize(image, (224, 224))
             image = TF.to_tensor(image)

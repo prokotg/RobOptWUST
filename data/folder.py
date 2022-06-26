@@ -84,6 +84,7 @@ class DatasetFolder(data.Dataset):
 
     def __init__(self, root, loader, extensions, transform=None,
                  target_transform=None, label_mapping=None, add_path=False):
+        super().__init__()
         classes, class_to_idx = self._find_classes(root)
         if label_mapping is not None:
             classes, class_to_idx = label_mapping(classes, class_to_idx)
