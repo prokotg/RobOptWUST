@@ -216,6 +216,7 @@ class ImageFolder(DatasetFolder):
                                           label_mapping=label_mapping)
         self.imgs = self.samples
 
+
 class TensorDataset(Dataset):
     """Dataset wrapping tensors.
 

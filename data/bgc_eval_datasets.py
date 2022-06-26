@@ -15,8 +15,8 @@ def make_loaders(workers, batch_size, transforms, data_path, dataset, shuffle_va
         raise ValueError("Test data must be stored in {0}".format(test_path))
 
     test_set = bgc_folder.ImageFolder(root=test_path, transform=transforms)
-    test_loader = DataLoader(test_set, batch_size=batch_size, 
-            shuffle=shuffle_val, num_workers=workers, pin_memory=True)
+    test_loader = DataLoader(test_set, batch_size=batch_size,
+                             shuffle=shuffle_val, num_workers=workers, pin_memory=True)
 
     return test_loader
 
@@ -38,12 +38,12 @@ class DataSet(object):
         '''
         '''
         transforms = self.transform_test
-        return make_loaders( workers=workers,
-                                batch_size=batch_size,
-                                transforms=transforms,
-                                data_path=self.data_path,
-                                dataset=self.ds_name,
-                                shuffle_val=shuffle_val)
+        return make_loaders(workers=workers,
+                            batch_size=batch_size,
+                            transforms=transforms,
+                            data_path=self.data_path,
+                            dataset=self.ds_name,
+                            shuffle_val=shuffle_val)
 
 
 class ImageNet9(DataSet):
@@ -55,12 +55,12 @@ class ImageNet9(DataSet):
         ds_name = 'ImageNet9'
         ds_kwargs = {
             'num_classes': 9,
-            'mean': ch.tensor([0.4717, 0.4499, 0.3837]), 
+            'mean': ch.tensor([0.4717, 0.4499, 0.3837]),
             'std': ch.tensor([0.2600, 0.2516, 0.2575]),
             'transform_test': transforms.ToTensor()
         }
         super(ImageNet9, self).__init__(ds_name,
-                data_path, **ds_kwargs)
+                                        data_path, **ds_kwargs)
 
 
 class ImageNet(DataSet):
@@ -77,5 +77,4 @@ class ImageNet(DataSet):
             'transform_test': transforms.ToTensor()
         }
         super(ImageNet, self).__init__(ds_name,
-                data_path, **ds_kwargs)
-
+                                       data_path, **ds_kwargs)

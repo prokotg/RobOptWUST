@@ -64,6 +64,7 @@ class ConditionalMAF(Flow):
             distribution=ConditionalDiagonalNormal(shape=[features], context_encoder=nn.Linear(conditional_count, 2 * features))
         )
 
+
 class MAF(Flow):
     def __init__(self, features, hidden_features, num_layers, num_blocks_per_layer, conditional_count,
                  use_residual_blocks=True, use_random_masks=False, use_random_permutations=False, activation=F.relu,

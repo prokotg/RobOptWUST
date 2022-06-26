@@ -5,9 +5,9 @@ import os.path
 import sys
 import torch.utils.data as data
 import torchvision.transforms
-from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms
+from data.augmentations import RandomBackgroundPerClass
 from data.shared import set_background, default_loader, divide_paths
 import torchvision.transforms.functional as TF
 
@@ -93,8 +93,7 @@ class DatasetFolder(data.Dataset):
         samples = make_dataset(root, class_to_idx, extensions)
         if len(samples) == 0:
             raise (RuntimeError("Found 0 files in subfolders of: " + root + "\n"
-                                                                            "Supported extensions are: " + ",".join(
-                extensions)))
+                                                                            "Supported extensions are: " + ",".join(extensions)))
 
         self.root = root
         self.loader = loader
@@ -189,6 +188,7 @@ class DatasetMultifolder(DatasetFolder):
         else:
             return sample, target
 
+
 IMG_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm', '.tif']
 
 
@@ -236,7 +236,6 @@ class MultiImageFolder(DatasetMultifolder):
                          label_mapping=label_mapping,
                          add_path=add_path)
         self.imgs = self.samples
-
 
 
 class SwapBackgroundFolder(data.Dataset):
@@ -319,6 +318,7 @@ class SwapBackgroundFolder(data.Dataset):
     
     def __len__(self):
         return len(self.samples)
+
 
 class BackgroundReplacementDataset(MultiImageFolder):
     def __init__(self, roots, loader=default_loader, transform=None,

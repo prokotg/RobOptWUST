@@ -80,19 +80,16 @@ if __name__ == "__main__":
         
         flow = ConditionalNICE(args.flow_embedding_size, hidden_sizes=[256, 256, 256], num_layers=4, conditional_count=args.flow_embedding_size)
         model = FlowModel(base_model,
-            nn.Sequential(
-                nn.Linear(last_layer_size, 512),
-                nn.ReLU(),
-                nn.Linear(512, args.flow_embedding_size),
-                nn.ReLU(),
-            ), nn.Sequential(
-                nn.Linear(args.flow_embedding_size, 128),
-                nn.Sigmoid(),
-                nn.Linear(128, 9),
-                nn.Sigmoid()
-            ), 9,
-            flow=flow,
-            embedding_size=args.flow_embedding_size, z_count=16)
+                          nn.Sequential(nn.Linear(last_layer_size, 512),
+                                        nn.ReLU(),
+                                        nn.Linear(512, args.flow_embedding_size),
+                                        nn.ReLU()),
+                          nn.Sequential(nn.Linear(args.flow_embedding_size, 128),
+                                        nn.Sigmoid(),
+                                        nn.Linear(128, 9),
+                                        nn.Sigmoid()), 9,
+                          flow=flow,
+                          embedding_size=args.flow_embedding_size, z_count=16)
 
     callbacks = []
 

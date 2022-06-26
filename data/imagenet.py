@@ -22,8 +22,8 @@ def make_loader(workers, batch_size, transforms, data_path, name, shuffle_val=Fa
         if use_background_replacement:
             set_folder = folder.BackgroundReplacementDataset(roots=[path] + additional_paths, transform=transforms, add_path=add_path)
         elif use_swap_background_minibatch_loader:
-            set_folder = folder.SwapBackgroundFolder(root=path, backgrounds=additional_paths[0], foregrounds=additional_paths[1], pre_transform=transforms[0], post_transform=transforms[1], 
-                add_path=add_path, assigned_backgrounds_per_instance=assigned_backgrounds_per_instance, random_seed=random_seed)
+            set_folder = folder.SwapBackgroundFolder(root=path, backgrounds=additional_paths[0], foregrounds=additional_paths[1], pre_transform=transforms[0], post_transform=transforms[1],
+                                                     add_path=add_path, assigned_backgrounds_per_instance=assigned_backgrounds_per_instance, random_seed=random_seed)
         else:
             set_folder = folder.MultiImageFolder(root=[path] + additional_paths, transform=transforms, add_path=add_path)
 
@@ -82,8 +82,8 @@ class DataSet(object):
     def get_model(self, arch, pretrained):
         '''
         Args:
-            arch (str) : name of architecture 
-            pretrained (bool): whether to try to load torchvision 
+            arch (str) : name of architecture
+            pretrained (bool): whether to try to load torchvision
                 pretrained checkpoint
         Returns:
             A model with the given architecture that works for each
@@ -135,7 +135,6 @@ class ImageNet(DataSet):
         }
         super(ImageNet, self).__init__(ds_name,
                                        data_path, **ds_kwargs)
-
 
 
 class DataSetBackgroundAugmented(DataSet):

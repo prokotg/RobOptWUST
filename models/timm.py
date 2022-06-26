@@ -1,9 +1,7 @@
 import torch
-from torch import nn
 from torch.nn import functional as F
 import pytorch_lightning as pl
 import torchmetrics
-import time
 
 
 class TIMMModel(pl.LightningModule):

@@ -1,5 +1,4 @@
 from cv2 import cv2
-from tqdm import tqdm
 import numpy as np
 import torchvision.transforms.functional as TF
 from PIL import Image
