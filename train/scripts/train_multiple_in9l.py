@@ -15,11 +15,9 @@ parser.add_argument('--backgrounds-path', type=str, default='data/only_bg_t')
 parser.add_argument('--foregrounds-path', type=str, default='data/only_fg')
 parser.add_argument('-c', '--chances', nargs='+', type=float)
 
-
-
 args = parser.parse_args()
 
-networks = { 'resnet50': [0]}
+networks = {'resnet50': [0]}
 
 epochs = args.epochs
 save_dir = args.save_directory
@@ -27,23 +25,23 @@ transform_chances = args.chances
 auto_transform = args.use_auto_background_transform
 generic_args = ['env', 'PYTHONPATH=.', 'python', './train/scripts/in9l_network.py', '-e', str(epochs), '-d', args.dataset_path, '--backgrounds-path', args.backgrounds_path, '--foregrounds-path', args.foregrounds_path, '-w', str(args.workers), '-l', args.log_dir, '-g', str(args.gpus)]
 for net in networks:
-	os.makedirs(f'{save_dir}/{net}', exist_ok=True)
-	for i in networks[net]:
-		if transform_chances is not None:
-			for j in transform_chances:
-				print(f'Training {net} copy {i} - chance {j}!')
-				os.makedirs(f'{save_dir}/{net}/{j}', exist_ok=True)
-				in9l_network_args = generic_args +  ['-n', net, '-t', 'true', '--background-transform-chance', str(j), '-p', f'{save_dir}/{net}/{j}/{i}.pkl']
-				subprocess.run(in9l_network_args)
-		elif auto_transform == True:
-			print(f'Training {net} copy {i}!')
-			in9l_network_args = generic_args + ['-n', net, '-t', 'true', '--use-auto-background-transform', 'true', '-p', f'{save_dir}/{net}/{i}.pkl']
-			subprocess.run(in9l_network_args)
-		elif args.use_background_blur:
-			print(f'Training {net} copy {i}!')
-			in9l_network_args = generic_args + ['-n', net, '--use-background-blur', 'true', '-p', f'{save_dir}/{net}/{i}.pkl']
-			subprocess.run(in9l_network_args)
-		else:
-			print(f'Training {net} copy {i}!')
-			in9l_network_args = generic_args + ['-n', net, '-p', f'{save_dir}/{net}/{i}.pkl']
-			subprocess.run(in9l_network_args)
+    os.makedirs(f'{save_dir}/{net}', exist_ok=True)
+    for i in networks[net]:
+        if transform_chances is not None:
+            for j in transform_chances:
+                print(f'Training {net} copy {i} - chance {j}!')
+                os.makedirs(f'{save_dir}/{net}/{j}', exist_ok=True)
+                in9l_network_args = generic_args + ['-n', net, '-t', 'true', '--background-transform-chance', str(j), '-p', f'{save_dir}/{net}/{j}/{i}.pkl']
+                subprocess.run(in9l_network_args)
+        elif auto_transform is True:
+            print(f'Training {net} copy {i}!')
+            in9l_network_args = generic_args + ['-n', net, '-t', 'true', '--use-auto-background-transform', 'true', '-p', f'{save_dir}/{net}/{i}.pkl']
+            subprocess.run(in9l_network_args)
+        elif args.use_background_blur:
+            print(f'Training {net} copy {i}!')
+            in9l_network_args = generic_args + ['-n', net, '--use-background-blur', 'true', '-p', f'{save_dir}/{net}/{i}.pkl']
+            subprocess.run(in9l_network_args)
+        else:
+            print(f'Training {net} copy {i}!')
+            in9l_network_args = generic_args + ['-n', net, '-p', f'{save_dir}/{net}/{i}.pkl']
+            subprocess.run(in9l_network_args)

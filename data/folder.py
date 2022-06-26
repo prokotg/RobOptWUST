@@ -1,14 +1,15 @@
+import random
+import torch
 import os
 import os.path
 import sys
-
 import torch.utils.data as data
 import torchvision.transforms
-from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms
-
-#from augmentations import RandomBackgroundPerClass
+from data.augmentations import RandomBackgroundPerClass
+from data.shared import set_background, default_loader, divide_paths
+import torchvision.transforms.functional as TF
 
 
 def has_file_allowed_extension(filename, extensions):
@@ -84,6 +85,7 @@ class DatasetFolder(data.Dataset):
 
     def __init__(self, root, loader, extensions, transform=None,
                  target_transform=None, label_mapping=None, add_path=False):
+        super().__init__()
         classes, class_to_idx = self._find_classes(root)
         if label_mapping is not None:
             classes, class_to_idx = label_mapping(classes, class_to_idx)
@@ -91,8 +93,7 @@ class DatasetFolder(data.Dataset):
         samples = make_dataset(root, class_to_idx, extensions)
         if len(samples) == 0:
             raise (RuntimeError("Found 0 files in subfolders of: " + root + "\n"
-                                                                            "Supported extensions are: " + ",".join(
-                extensions)))
+                                                                            "Supported extensions are: " + ",".join(extensions)))
 
         self.root = root
         self.loader = loader
@@ -191,30 +192,6 @@ class DatasetMultifolder(DatasetFolder):
 IMG_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm', '.tif']
 
 
-def pil_loader(path):
-    # open path as file to avoid ResourceWarning (https://github.com/python-pillow/Pillow/issues/835)
-    with open(path, 'rb') as f:
-        img = Image.open(f)
-        return img.convert('RGB')
-
-
-def accimage_loader(path):
-    import accimage
-    try:
-        return accimage.Image(path)
-    except IOError:
-        # Potentially a decoding problem, fall back to PIL.Image
-        return pil_loader(path)
-
-
-def default_loader(path):
-    from torchvision import get_image_backend
-    if get_image_backend() == 'accimage':
-        return accimage_loader(path)
-    else:
-        return pil_loader(path)
-
-
 class ImageFolder(DatasetFolder):
     """A generic data loader where the images are arranged in this way: ::
 
@@ -259,6 +236,88 @@ class MultiImageFolder(DatasetMultifolder):
                          label_mapping=label_mapping,
                          add_path=add_path)
         self.imgs = self.samples
+
+
+class SwapBackgroundFolder(data.Dataset):
+    def __init__(self, root, backgrounds, foregrounds, loader=default_loader, changed_backgrounds_count=8, pre_transform=None,
+                 assigned_backgrounds_per_instance=None, random_seed=None, post_transform=None, target_transform=None, label_mapping=None, add_path=False):
+        classes, class_to_idx = self._find_classes(root)
+        if label_mapping is not None:
+            classes, class_to_idx = label_mapping(classes, class_to_idx)
+
+        samples = make_dataset(root, class_to_idx, IMG_EXTENSIONS)
+        foregrounds = make_dataset(foregrounds, class_to_idx, IMG_EXTENSIONS)
+        backgrounds = make_dataset(backgrounds, class_to_idx, IMG_EXTENSIONS)
+        if assigned_backgrounds_per_instance is not None:
+            backgrounds = divide_paths(foregrounds, backgrounds, assigned_backgrounds_per_instance, random_seed)
+        
+        if len(samples) == 0:
+            raise(RuntimeError("Found 0 files in subfolders of: " + root + "\n"
+                               "Supported extensions are: " + ",".join(IMG_EXTENSIONS)))
+        
+        self.root = root
+        self.loader = default_loader
+
+        self.add_path = add_path
+        self.classes = classes
+        self.class_to_idx = class_to_idx
+        self.samples = samples
+        self.backgrounds = backgrounds
+        self.foregrounds = foregrounds
+        self.targets = [s[1] for s in samples]
+        self.changed_backgrounds_count = changed_backgrounds_count
+        self.assigned_backgrounds_per_instance = assigned_backgrounds_per_instance
+        self.pre_transform = pre_transform
+        self.post_transform = post_transform
+        self.target_transform = target_transform
+        self.state = True
+
+    def _find_classes(self, dir):
+        if sys.version_info >= (3, 5):
+            classes = [d.name for d in os.scandir(dir) if d.is_dir()]
+        else:
+            classes = [d for d in sorted(os.listdir(dir)) if os.path.isdir(os.path.join(dir, d))]
+        classes.sort()
+        class_to_idx = {classes[i]: i for i in range(len(classes))}
+        return classes, class_to_idx
+
+    def __getitem__(self, index):
+        path, target = self.samples[index]
+        sample = self.loader(path)
+        foreground = self.loader(self.foregrounds[index][0])
+
+        changed_backgrounds = []
+
+        if self.pre_transform is not None:
+            sample = self.pre_transform(sample)
+        
+        if self.target_transform is not None:
+            target = self.target_transform(target)
+        
+        if self.state:
+            for i in range(self.changed_backgrounds_count):
+                background_set = self.backgrounds
+                if self.assigned_backgrounds_per_instance is not None:
+                    background_set = self.backgrounds[index]
+                selected_background = background_set[int(len(background_set) * random.random())]
+                background = self.loader(selected_background[0])
+                background = TF.pil_to_tensor(background)
+                changed_backgrounds.append(set_background(foreground, background)[0])
+            changed_backgrounds = torch.stack(changed_backgrounds)
+            minibatch = torch.cat((sample.unsqueeze(0), changed_backgrounds), dim=0)
+        else:
+            minibatch = sample
+        
+        if self.add_path:
+            return (path, minibatch), target
+        else:
+            return minibatch, target
+
+    def change_state(self, state):
+        self.state = state
+    
+    def __len__(self):
+        return len(self.samples)
 
 
 class BackgroundReplacementDataset(MultiImageFolder):

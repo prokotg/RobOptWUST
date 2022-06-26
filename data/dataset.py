@@ -50,7 +50,7 @@ class BGColouredMNIST:
 
     def __getitem__(self, item):
         gray_img, target = self.dataset.__getitem__(item)
-        color_img = cv2.cvtColor(gray_img.numpy()[0], cv2.COLOR_GRAY2RGB)*255
+        color_img = cv2.cvtColor(gray_img.numpy()[0], cv2.COLOR_GRAY2RGB) * 255
 
         bg_mask = (gray_img == 0.0)[0]
 

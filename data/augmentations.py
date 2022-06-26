@@ -1,31 +1,10 @@
 import os
 
-from cv2 import cv2
 import torch
-from . import folder
 import numpy as np
 import torchvision.transforms.functional as TF
 from pytorch_lightning.callbacks import Callback
-
-
-def calculate_mask(img):
-    # convert img to grey
-    img_grey = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-    # set a thresh
-    thresh = 3
-    # get threshold image
-    ret, thresh_img = cv2.threshold(img_grey, thresh, 255, cv2.THRESH_BINARY)
-    # find contours
-    contours, hierarchy = cv2.findContours(thresh_img, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    # create an empty image for contours
-    img_contours = np.zeros(img.shape[:2])
-    # draw the contours on the empty image
-    cv2.drawContours(img_contours, contours, -1, 1, thickness=cv2.FILLED)
-    # erode small spots
-    img_contours = cv2.erode(img_contours, np.ones((3, 3), np.uint8), iterations=1)
-    # close gaps with bigger kernel
-    img_contours = cv2.dilate(img_contours, np.ones((7, 7), np.uint8), iterations=1)
-    return img_contours
+from data import shared
 
 
 class RandomBackgroundPerClass(object):
@@ -42,18 +21,13 @@ class RandomBackgroundPerClass(object):
         augmentation_chance = torch.rand(1)
         mask = np.zeros_like(image)
         background_class = -1
-        if augmentation_chance < 100 * self.augment_chances[target]:
+        if augmentation_chance < self.augment_chances[target]:
             image = backgroundless.copy()
             background_id = torch.randint(0, len(self.backgrounds_paths), (1,))
             #  example background path '...\only_bg_t\\only_bg_t\\/train/00_dog/n02085936_2693.JPEG'
             background_class = int(os.path.split(os.path.dirname(self.backgrounds_paths[background_id]))[-1].split('_')[0])
-            background = TF.pil_to_tensor(folder.default_loader(self.backgrounds_paths[background_id]))
-            background = TF.resize(background, (224, 224))
-            image = TF.resize(image, (224, 224))
-            mask = calculate_mask(np.asarray(image))
-            mask = (mask == 0.0)
-            image = TF.to_tensor(image)
-            image[:, mask] = (background.float() / 255)[:, mask]
+            background = TF.pil_to_tensor(shared.default_loader(self.backgrounds_paths[background_id]))
+            image, _ = shared.set_background(image, background)
         else:
             image = TF.resize(image, (224, 224))
             image = TF.to_tensor(image)
@@ -99,7 +73,7 @@ class UpdateChancesBasedOnAccuracyCallback(Callback):
         background_indices = np.random.choice(np.array(range(len(backgrounds))), size=image_count, replace=False)
         images = []
         for bg_ind in background_indices:
-            background = TF.pil_to_tensor(folder.default_loader(backgrounds[bg_ind]))
+            background = TF.pil_to_tensor(shared.default_loader(backgrounds[bg_ind]))
             if self.use_cuda:
                 background = background.cuda()
             background = TF.resize(background.float() / 255, (224, 224))
