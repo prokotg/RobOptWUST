@@ -22,16 +22,16 @@ if __name__ == "__main__":
     parser.add_argument('-w', '--workers', type=int, default=4)
     parser.add_argument('-g', '--gpus', type=int, default=1)
     parser.add_argument('-e', '--epochs', type=int, default=200)
-    parser.add_argument('-t', '--use-background-transform', type=bool, default=False, action='store_true')
-    parser.add_argument('-b', '--use-background-blur', type=bool, default=False, action='store_true')
+    parser.add_argument('-t', '--use-background-transform', default=False, action='store_true')
+    parser.add_argument('-b', '--use-background-blur', default=False, action='store_true')
     parser.add_argument('--batch-size', type=int, default=32)
-    parser.add_argument('--use-auto-background-transform', type=bool, default=False, action='store_true')
-    parser.add_argument('--use-swap-background-minibatch-loader', type=bool, default=False, action='store_true')
-    parser.add_argument('--use-flow-model', type=bool, default=False, action='store_true')
-    parser.add_argument('--use-loaded-model', type=bool, default=False, action='store_true')
+    parser.add_argument('--use-auto-background-transform', default=False, action='store_true')
+    parser.add_argument('--use-swap-background-minibatch-loader', default=False, action='store_true')
+    parser.add_argument('--use-flow-model', default=False, action='store_true')
+    parser.add_argument('--use-loaded-model', default=False, action='store_true')
     parser.add_argument('--select-gpu', type=int, default=None)
     parser.add_argument('--limit-backgrounds-per-instance', type=int, default=None)
-    parser.add_argument('--use-staged-flow-learning', type=bool, default=True)
+    parser.add_argument('--do-not-use-staged-flow-learning', default=False, action='store_true')
     parser.add_argument('--flow-learning-stage-start-epoch', type=int, default=5)
     parser.add_argument('--flow-embedding-size', type=int, default=128)
     parser.add_argument('--background-transform-chance', type=float, default=0.0)
@@ -45,8 +45,7 @@ if __name__ == "__main__":
     tensorboard_logger = pl_loggers.TensorBoardLogger(args.log_dir, name=f'in9l_{args.network}')
 
     assert (1 if args.use_background_transform else 0) + (1 if args.use_background_blur else 0) <= 1, 'Do not use two of the augmentation in the same time!'
-    assert args.use_background_transform if args.use_background_replacement_metadata else True, 'Background replacement metadata must be used along with background transforms!'
-    
+
     if args.use_background_transform:
         imagenet_dataset = ImageNet9.ImageNetBackgroundChangeAugmented(args.dataset_path, args.backgrounds_path, args.foregrounds_path, args.background_transform_chance)
     elif args.use_background_blur:
@@ -110,7 +109,7 @@ if __name__ == "__main__":
     callbacks.append(AutopickleModel(model))
     if args.use_auto_background_transform:
         callbacks.append(UpdateChancesBasedOnAccuracyCallback(model, imagenet_dataset.augmentation, args.augmentation_checking_dataset_size, args.gpus > 0))
-    if args.use_flow_model and args.use_staged_flow_learning:
+    if args.use_flow_model and not args.do_not_use_staged_flow_learning:
         callbacks.append(FreezeNetworkCallback(model, train_loader, [(1, True, True, False, False), (args.flow_learning_stage_start_epoch, False, True, True, True)]))
     
     trainer = pl.Trainer(max_epochs=args.epochs, logger=tensorboard_logger, gpus=args.gpus if args.select_gpu is None else [args.select_gpu], callbacks=callbacks)
