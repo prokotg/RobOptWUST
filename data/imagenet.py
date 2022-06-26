@@ -26,7 +26,6 @@ def make_loader(workers, batch_size, transforms, data_path, name, shuffle_val=Fa
                 add_path=add_path, assigned_backgrounds_per_instance=assigned_backgrounds_per_instance, random_seed=random_seed)
         else:
             set_folder = folder.MultiImageFolder(root=[path] + additional_paths, transform=transforms, add_path=add_path)
-        # if decouple, make background image dataset
 
     loader = DataLoader(set_folder, batch_size=batch_size, shuffle=shuffle_val, num_workers=workers, pin_memory=True)
 
@@ -43,6 +42,7 @@ def generate_loaders(workers, batch_size, transform_train, transform_test, data_
     train_loader = make_loader(workers, batch_size, transform_train, data_path, 'train', True, add_path=add_path,
                                additional_paths=additional_paths, use_background_replacement=use_background_replacement, use_swap_background_minibatch_loader=use_swap_background_minibatch_loader,
                                assigned_backgrounds_per_instance=assigned_backgrounds_per_instance, random_seed=random_seed)
+
     test_loader = make_loader(workers, batch_size, transform_test, data_path, 'val', shuffle_val, add_path=add_path)
     return train_loader, test_loader
 
@@ -135,6 +135,7 @@ class ImageNet(DataSet):
         }
         super(ImageNet, self).__init__(ds_name,
                                        data_path, **ds_kwargs)
+
 
 
 class DataSetBackgroundAugmented(DataSet):

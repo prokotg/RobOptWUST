@@ -1,14 +1,15 @@
 import random
 import torch
+import os
+import os.path
+import sys
 import torch.utils.data as data
+import torchvision.transforms
+from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms
 from data.shared import set_background, default_loader, divide_paths
 import torchvision.transforms.functional as TF
-
-import os
-import os.path
-import sys
 
 
 def has_file_allowed_extension(filename, extensions):
@@ -91,8 +92,9 @@ class DatasetFolder(data.Dataset):
 
         samples = make_dataset(root, class_to_idx, extensions)
         if len(samples) == 0:
-            raise(RuntimeError("Found 0 files in subfolders of: " + root + "\n"
-                               "Supported extensions are: " + ",".join(extensions)))
+            raise (RuntimeError("Found 0 files in subfolders of: " + root + "\n"
+                                                                            "Supported extensions are: " + ",".join(
+                extensions)))
 
         self.root = root
         self.loader = loader
@@ -143,7 +145,7 @@ class DatasetFolder(data.Dataset):
             sample = self.transform(sample)
         if self.target_transform is not None:
             target = self.target_transform(target)
-           
+
         if self.add_path:
             return (path, sample), target
         else:
@@ -172,17 +174,20 @@ class DatasetMultifolder(DatasetFolder):
     def __getitem__(self, index):
         path, target = self.samples[index]
         sample = self.loader(path)
-        background = self.loader(path.replace(self.roots[0].replace('train', ''), self.roots[1]))
+
+        # TODO: this can be backgrounds too ig (if you use blur, should be renamed alltogetheer)
+        foreground = self.loader(os.path.join(self.roots[1], 'train', os.path.relpath(path, self.root)))
         if self.transform is not None:
-            sample = self.transform((sample, background, target))
+            # here is an assumption that first transformation is applying random background. A transformation that takes
+            # tuple (image, its foreground, target class)
+            sample = self.transform((sample, foreground, target))
         if self.target_transform is not None:
             target = self.target_transform(target)
-        
+
         if self.add_path:
             return (path, sample), target
         else:
             return sample, target
-
 
 IMG_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm', '.tif']
 
@@ -211,6 +216,7 @@ class ImageFolder(DatasetFolder):
         class_to_idx (dict): Dict with items (class_name, class_index).
         imgs (list): List of (image path, class_index) tuples
     """
+
     def __init__(self, root, transform=None, target_transform=None,
                  loader=default_loader, label_mapping=None, add_path=False):
         super(ImageFolder, self).__init__(root, loader, IMG_EXTENSIONS,
@@ -225,11 +231,12 @@ class MultiImageFolder(DatasetMultifolder):
     def __init__(self, root, transform=None, target_transform=None,
                  loader=default_loader, label_mapping=None, add_path=False):
         super().__init__(root, loader, IMG_EXTENSIONS,
-                                          transform=transform,
-                                          target_transform=target_transform,
-                                          label_mapping=label_mapping,
-                                          add_path=add_path)
+                         transform=transform,
+                         target_transform=target_transform,
+                         label_mapping=label_mapping,
+                         add_path=add_path)
         self.imgs = self.samples
+
 
 
 class SwapBackgroundFolder(data.Dataset):
@@ -312,6 +319,35 @@ class SwapBackgroundFolder(data.Dataset):
     
     def __len__(self):
         return len(self.samples)
+
+class BackgroundReplacementDataset(MultiImageFolder):
+    def __init__(self, roots, loader=default_loader, transform=None,
+                 target_transform=None, label_mapping=None, add_path=False):
+        super().__init__(roots, loader=loader, transform=transform, target_transform=target_transform, label_mapping=label_mapping, add_path=add_path)
+        assert transform is not None, "Must be at least background replacement"
+
+        self.background_transform: RandomBackgroundPerClass = self.transform.transforms[0]
+        self.image_transform = torchvision.transforms.Compose(self.transform.transforms[1:])
+        self.background_transform.return_metadata = True
+        
+    def __getitem__(self, index):
+        path, target = self.samples[index]
+        sample = self.loader(path)
+
+        # TODO: this can be backgrounds too ig (if you use blur, should be renamed alltogetheer)
+        background = self.loader(os.path.join(self.roots[1], 'train', os.path.relpath(path, self.root)))
+        # here is an assumption that first transformation is applying random background. A transformation that takes
+        # tuple (image, its foreground, target class)
+        image_w_rand_back, mask, background_class = self.background_transform((sample, background, target))
+        sample = self.image_transform(image_w_rand_back)
+
+        if self.target_transform is not None:
+            target = self.target_transform(target)
+
+        if self.add_path:
+            return (path, sample), target, mask, background_class
+        else:
+            return sample, target, mask, background_class
 
 
 class TensorDataset(Dataset):

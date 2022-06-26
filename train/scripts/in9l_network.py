@@ -24,13 +24,13 @@ if __name__ == "__main__":
     parser.add_argument('-w', '--workers', type=int, default=4)
     parser.add_argument('-g', '--gpus', type=int, default=1)
     parser.add_argument('-e', '--epochs', type=int, default=200)
-    parser.add_argument('-t', '--use-background-transform', type=bool, default=False)
-    parser.add_argument('-b', '--use-background-blur', type=bool, default=False)
+    parser.add_argument('-t', '--use-background-transform', type=bool, default=False, action='store_true')
+    parser.add_argument('-b', '--use-background-blur', type=bool, default=False, action='store_true')
     parser.add_argument('--batch-size', type=int, default=32)
-    parser.add_argument('--use-auto-background-transform', type=bool, default=False)
-    parser.add_argument('--use-swap-background-minibatch-loader', type=bool, default=False)
-    parser.add_argument('--use-flow-model', type=bool, default=False)
-    parser.add_argument('--use-loaded-model', type=bool, default=False)
+    parser.add_argument('--use-auto-background-transform', type=bool, default=False, action='store_true')
+    parser.add_argument('--use-swap-background-minibatch-loader', type=bool, default=False, action='store_true')
+    parser.add_argument('--use-flow-model', type=bool, default=False, action='store_true')
+    parser.add_argument('--use-loaded-model', type=bool, default=False, action='store_true')
     parser.add_argument('--select-gpu', type=int, default=None)
     parser.add_argument('--limit-backgrounds-per-instance', type=int, default=None)
     parser.add_argument('--use-staged-flow-learning', type=bool, default=True)
@@ -46,8 +46,9 @@ if __name__ == "__main__":
 
     tensorboard_logger = pl_loggers.TensorBoardLogger(args.log_dir, name=f'in9l_{args.network}')
 
-    if args.use_background_transform and args.use_background_blur:
-        print('Do not use both of the augmentation in the same time!')
+    assert (1 if args.use_background_transform else 0) + (1 if args.use_background_blur else 0) <= 1, 'Do not use two of the augmentation in the same time!'
+    assert args.use_background_transform if args.use_background_replacement_metadata else True, 'Background replacement metadata must be used along with background transforms!'
+    
     if args.use_background_transform:
         imagenet_dataset = ImageNet9.ImageNetBackgroundChangeAugmented(args.dataset_path, args.backgrounds_path, args.foregrounds_path, args.background_transform_chance)
     elif args.use_background_blur:
