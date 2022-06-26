@@ -2,11 +2,9 @@ import argparse
 import timm
 import pickle as pkl
 import pytorch_lightning as pl
-from torch.utils.data import DataLoader
-from torchvision import transforms, models
+from torchvision import models
 from pytorch_lightning import loggers as pl_loggers
-from pytorch_lightning.callbacks.early_stopping import EarlyStopping
-from pytorch_lightning.callbacks import Callback, ModelCheckpoint
+from pytorch_lightning.callbacks import Callback
 from models.timm import TIMMModel
 from models.flow_model import FlowModel, FreezeNetworkCallback
 from models.flows import ConditionalNICE, ConditionalMAF
@@ -61,7 +59,7 @@ if __name__ == "__main__":
     if not args.use_flow_model:
         model = TIMMModel(timm.create_model(args.network, pretrained=False, num_classes=9))
     else:
-        # Hiperparametry - 
+        # Hiperparametry -
         #   - z_count - czyli jak dużo ma dogenerować obrazków z flowa
         #   - SwapBackgroundFolder ma argument changed_backgrounds_count nigdzie nie wypuszczony, mówiący ile ma być obrazków z podmienionymi tłami w minibatchu
         # Zmiana flowa polega na zmianie obiektu flow. Przykład CMAFowy:
@@ -80,21 +78,20 @@ if __name__ == "__main__":
         for p in base_model.parameters():
             p.requires_grad = False
         
-        
         flow = ConditionalNICE(args.flow_embedding_size, hidden_sizes=[256, 256, 256], num_layers=4, conditional_count=args.flow_embedding_size)
         model = FlowModel(base_model,
             nn.Sequential(
                 nn.Linear(last_layer_size, 512),
                 nn.ReLU(),
-                nn.Linear(512, embedding_size),
+                nn.Linear(512, args.flow_embedding_size),
                 nn.ReLU(),
             ), nn.Sequential(
-                nn.Linear(embedding_size, 128),
+                nn.Linear(args.flow_embedding_size, 128),
                 nn.Sigmoid(),
                 nn.Linear(128, 9),
                 nn.Sigmoid()
             ), 9,
-            flow=flow, 
+            flow=flow,
             embedding_size=args.flow_embedding_size, z_count=16)
 
     callbacks = []
@@ -106,10 +103,10 @@ if __name__ == "__main__":
         def on_validation_epoch_end(self, trainer, module):
             model_file = open(args.save_path, 'wb')
             if hasattr(self.model, 'base_model'):
-		        # The base model should not need it anymore- and it's a bit messing up pickling
-    	        self.model.base_model.train_dataloader = None
-    	        self.model.base_model.val_dataloader = None
-    	        self.model.base_model.trainer = None
+                # The base model should not need it anymore- and it's a bit messing up pickling
+                self.model.base_model.train_dataloader = None
+                self.model.base_model.val_dataloader = None
+                self.model.base_model.trainer = None
             pkl.dump(self.model, model_file)
             model_file.close()
 
@@ -117,9 +114,8 @@ if __name__ == "__main__":
     if args.use_auto_background_transform:
         callbacks.append(UpdateChancesBasedOnAccuracyCallback(model, imagenet_dataset.augmentation, args.augmentation_checking_dataset_size, args.gpus > 0))
     if args.use_flow_model and args.use_staged_flow_learning:
-    	callbacks.append(FreezeNetworkCallback(model, train_loader, [(1, True, True, False, False), (args.flow_learning_stage_start_epoch, False, True, True, True)]))
+        callbacks.append(FreezeNetworkCallback(model, train_loader, [(1, True, True, False, False), (args.flow_learning_stage_start_epoch, False, True, True, True)]))
     
-    callbacks.append(checkpoint_callback)
     trainer = pl.Trainer(max_epochs=args.epochs, logger=tensorboard_logger, gpus=args.gpus if args.select_gpu is None else [args.select_gpu], callbacks=callbacks)
     trainer.fit(model, train_loader, val_loader)
 

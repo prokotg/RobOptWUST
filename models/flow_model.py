@@ -1,5 +1,4 @@
 import torch
-import torch.nn as nn
 from pytorch_lightning.callbacks import Callback
 from torch.nn import functional as F
 import pytorch_lightning as pl
@@ -11,7 +10,7 @@ class FlowModel(pl.LightningModule):
     def _default_y_selector(z):
         if len(z.shape) == 2:
             return z
-        return z.mode(dim=1)[0] #z.mean(dim=1)
+        return z.mode(dim=1)[0]
 
     def __init__(self, base_model, embedding_model, classifier_model, class_count, flow, use_flow=True, use_class_context=True, embedding_size=100, z_count=100, y_selector=_default_y_selector):
         super().__init__()
@@ -133,4 +132,3 @@ class FreezeNetworkCallback(Callback):
                     self.model.change_flow_state(flow_state)
                 if self.loader is not None:
                     self.loader.dataset.change_state(loader_state)
-
